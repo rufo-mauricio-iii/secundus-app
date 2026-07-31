@@ -8,68 +8,68 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<!-- home-v4's own stylesheet, verbatim from the vault widget (font url()s rewritten
+     to local files). It owns the page: :root palette, topbar, nav, layout, kanban. -->
+<link rel="stylesheet" href="home.css">
 <style>
-  /* ---------- app shell (Renovatio-dark, matches the Health apps) ---------- */
+  /* ---------- shell additions (gate + toast + sync pip) ---------- */
   :root {
+    /* aliases so the Health app skins keep reading the names they were written against */
     --bg:#120a14; --fg:#f0e8dc; --card:#1a111d; --card2:#231829;
     --hairline:#ffffff10; --dim:#a89f9a; --faint:#6b6068; --cue:#8b8078;
-    --gold:#c9a86c; --gold-dim:rgba(201,168,108,.45); --gold-wash:rgba(201,168,108,.08);
+    --gold-wash:rgba(201,168,108,.08);
     --done:#7a9b7a; --crimson:#9b3b4a;
     --serif:'Libre Baskerville',Georgia,serif;
     --body:'IBM Plex Sans',system-ui,sans-serif;
     --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
-    --ok:#a6e3a1; --err:#f38ba8;
+    --err:#f38ba8;
   }
   * { box-sizing:border-box; margin:0; }
-  /* min-height, not height: a viewport-height body is the sticky containing
-     block, so it scrolls away and takes the pinned topbar with it */
   html { height:100%; }
-  body { min-height:100%; background:var(--bg); color:var(--fg); font:15px/1.5 var(--body); display:flex; flex-direction:column; }
-  /* header + tab bar travel together and stay pinned — losing the tabs mid-scroll
-     strands you inside a space with no way back (reported on phone 2026-07-31) */
-  .topbar { position:sticky; top:0; z-index:30; background:var(--card); }
-  header.app {
-    display:flex; align-items:center; gap:10px; padding:10px 14px;
-    background:var(--card); border-bottom:1px solid var(--hairline);
-  }
-  header.app h1 { font-family:var(--serif); font-size:16px; font-weight:700; color:var(--gold); flex:1; }
-  #sync-dot { width:9px; height:9px; border-radius:50%; background:var(--faint); }
-  #sync-dot.ok { background:var(--ok); } #sync-dot.err { background:var(--err); }
-  #sync-label { font-family:var(--mono); font-size:11px; color:var(--faint); }
-  nav.app {
-    display:flex; gap:0; padding:0 8px; overflow-x:auto; background:var(--card);
-    border-bottom:1px solid var(--hairline); scrollbar-width:none;
-  }
-  nav.app::-webkit-scrollbar { display:none; }
-  nav.app button {
-    border:0; background:transparent; color:var(--faint); padding:11px 16px;
-    font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
-    cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent;
-  }
-  nav.app button.active { color:var(--gold); border-bottom-color:var(--gold); background:var(--gold-wash); }
-  main { flex:1; padding:14px; max-width:1100px; width:100%; margin:0 auto; }
-  .view { display:none; } .view.active { display:block; }
-  .card { background:var(--card); border:1px solid var(--hairline); border-radius:4px; padding:16px; margin-bottom:12px; }
-  .placeholder { color:var(--faint); font-style:italic; }
-  #gate { max-width:420px; margin:8vh auto; }
+  body { min-height:100%; }
+  #sync-dot { width:7px; height:7px; border-radius:50%; background:var(--text-muted); flex-shrink:0; }
+  #sync-dot.ok { background:var(--ok); } #sync-dot.err { background:var(--bad); }
+  #sync-label { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); }
+  #gate { max-width:420px; margin:8vh auto; padding:0 16px; }
+  #gate .card { background:var(--bg-surface); border:1px solid var(--border); border-radius:4px; padding:20px; }
+  #gate h2 { font-family:var(--serif); color:var(--gold); margin-bottom:10px; }
   #gate input, #gate select {
     width:100%; padding:10px; margin:6px 0 14px; border-radius:2px;
-    border:1px solid var(--hairline); background:var(--card2); color:var(--fg); font-size:14px;
+    border:1px solid var(--border); background:var(--bg-elevated); color:var(--text); font-size:14px;
   }
-  #gate button, .btn {
+  #gate button {
     background:none; color:var(--gold); border:1px solid var(--gold-dim);
     padding:10px 18px; border-radius:2px; font-family:var(--mono); font-size:12px;
     letter-spacing:.2em; text-transform:uppercase; cursor:pointer;
   }
-  #gate button:hover, .btn:hover { background:var(--gold-wash); }
-  .note-sm { font-size:12px; color:var(--faint); }
+  #gate button:hover { background:var(--gold-bg); }
+  .note-sm { font-size:12px; color:var(--text-muted); }
   #toast {
     position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
-    background:var(--card2); color:var(--fg); padding:10px 18px; border:1px solid var(--hairline);
-    border-radius:2px; font-family:var(--mono); font-size:12px; display:none; z-index:60;
+    background:var(--bg-elevated); color:var(--text); padding:10px 18px; border:1px solid var(--border);
+    border-radius:2px; font-family:var(--mono); font-size:12px; display:none; z-index:200;
     box-shadow:0 4px 16px #00000066; max-width:90vw;
   }
-  @media (min-width:720px) { nav.app { justify-content:center; } main { padding:24px; } }
+  /* home.css declares .topbar sticky at line 476, then re-declares it
+     position:relative at line 716 — the later rule wins, so the tab bar scrolls
+     away. This restores the pin (loading after home.css). */
+  .topbar { position:sticky !important; top:0; z-index:100; }
+
+  /* the 8 tabs scroll horizontally on a phone instead of wrapping into rows */
+  @media (max-width:820px) {
+    .topbar { padding:7px 12px; gap:8px; }
+    .topbar .nav { margin-left:0; order:3; width:100%; overflow-x:auto; scrollbar-width:none; padding-bottom:1px; }
+    .topbar .nav::-webkit-scrollbar { display:none; }
+    .topbar .nav-btn { flex:0 0 auto; padding:5px 9px; }
+    .topbar .right { order:2; margin-left:auto; }
+    /* the date + its RENOVATIO suffix cost a whole row on a phone */
+    .topbar .date, .topbar .sep { display:none; }
+    .topbar h1 { font-size:13px; letter-spacing:3px; }
+    .toggle-btn { padding:4px 8px; font-size:10px; }
+    .main { padding:12px; }
+  }
+  /* app tabs (workout/diet) host the Health apps — they bring their own skin */
+  #workoutBody, #dietBody { width:100%; }
 
   /* ---------- Workout · Renovatio skin (ported from Workout.md) ---------- */
   .wkt{ color:var(--fg); background:var(--bg); font-family:var(--body);
@@ -413,36 +413,22 @@
 </style>
 </head>
 <body>
-<div class="topbar">
-  <header class="app">
-    <h1>Secundus</h1>
-    <span id="sync-label"></span>
-    <span id="sync-dot" title="repo connection"></span>
-  </header>
-  <nav class="app" id="nav" hidden></nav>
-</div>
-<main>
-  <section id="gate" class="view active">
-    <div class="card">
-      <h2 style="margin-bottom:10px;font-family:var(--serif)">Connect to your repo</h2>
-      <label class="note-sm">GitHub fine-grained token (Contents read/write)</label>
-      <input id="pat" type="password" placeholder="github_pat_…" autocomplete="off">
-      <label class="note-sm">Repo</label>
-      <select id="repo-select">
-        <option value="rufo-mauricio-iii/secundus-site">secundus-site (build sandbox)</option>
-        <option value="rufo-mauricio-iii/secundus_os">secundus_os (LIVE canon)</option>
-      </select>
-      <button id="connect">Connect</button>
-      <p class="note-sm" style="margin-top:12px">Token stays in this device's browser storage only.</p>
-    </div>
-  </section>
-  <section id="view-workout" class="view"></section>
-  <section id="view-food" class="view"></section>
-  <section id="view-board" class="view"><div class="card"><h2>Board</h2><p class="placeholder">M3 — 6 lanes, 4 domains.</p></div></section>
-  <section id="view-tracking" class="view"><div class="card"><h2>Tracking</h2><p class="placeholder">M4 — habit ticks + capture.</p></div></section>
-  <section id="view-brief" class="view"><div class="card"><h2>Brief</h2><p class="placeholder">M4 — latest brief + staleness label.</p></div></section>
-  <section id="view-queue" class="view"><div class="card"><h2>Queue</h2><p class="placeholder">M4 — staged work, read-only.</p></div></section>
-</main>
+<!-- gate: shown until this device has a token; the dashboard replaces it -->
+<section id="gate">
+  <div class="card">
+    <h2>Connect to your repo</h2>
+    <label class="note-sm">GitHub fine-grained token (Contents read/write)</label>
+    <input id="pat" type="password" placeholder="github_pat_…" autocomplete="off">
+    <label class="note-sm">Repo</label>
+    <select id="repo-select">
+      <option value="rufo-mauricio-iii/secundus_os">secundus_os (LIVE canon)</option>
+      <option value="rufo-mauricio-iii/secundus-site">secundus-site (build sandbox)</option>
+    </select>
+    <button id="connect">Connect</button>
+    <p class="note-sm" style="margin-top:12px">Token stays in this device's browser storage only.</p>
+  </div>
+</section>
+<div id="home-v4-root" hidden></div>
 <div id="toast"></div>
 
 <script>
@@ -589,8 +575,6 @@ async function imageURL(path) {
 })();
 
 /* ============================== app shell ============================== */
-/* Spaces exposed in this build — others stay dark until their milestone ships. */
-const SPACES = ["workout", "food"];
 const $ = id => document.getElementById(id);
 function el(parent, tag, cls, text) {
   const n = document.createElement(tag);
@@ -603,28 +587,9 @@ function toast(msg, ms = 2500) {
   const t = $("toast"); t.textContent = msg; t.style.display = "block";
   clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms);
 }
-function show(space) {
-  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-  $(`view-${space}`).classList.add("active");
-  document.querySelectorAll("nav.app button").forEach(b =>
-    b.classList.toggle("active", b.dataset.space === space));
-  localStorage.setItem("secundus.space", space);
-  if (space === "workout") Workout.mount();
-  if (space === "food") Food.mount();
-}
-function boot() {
-  const nav = $("nav");
-  nav.innerHTML = SPACES.map(s => `<button data-space="${s}">${s}</button>`).join("");
-  nav.onclick = e => e.target.dataset.space && show(e.target.dataset.space);
-  nav.hidden = SPACES.length < 2;   // one space = no tab bar to explain
-  verifyConnection().then(ok => {
-    if (!ok) return;
-    const saved = localStorage.getItem("secundus.space");
-    show(SPACES.includes(saved) ? saved : SPACES[0]);
-  });
-}
 async function verifyConnection() {
   const dot = $("sync-dot"), label = $("sync-label");
+  if (!dot) return true;
   try {
     const res = await gh("");
     if (!res.ok) throw new Error(res.status);
@@ -633,10 +598,13 @@ async function verifyConnection() {
   } catch {
     dot.className = "err"; label.textContent = "connection failed";
     toast("Repo connection failed — check token", 4000);
-    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-    $("gate").classList.add("active");
     return false;
   }
+}
+async function boot() {
+  $("gate").hidden = true;
+  $("home-v4-root").hidden = false;
+  await Home.mount();
 }
 $("connect").onclick = () => {
   const pat = $("pat").value.trim();
@@ -644,7 +612,938 @@ $("connect").onclick = () => {
   store.pat = pat; store.repo = $("repo-select").value;
   boot();
 };
-if (store.pat && store.repo) boot();
+/* auto-start lives at the very bottom of this script — Home/Workout/Food are
+   const-declared below and are in the temporal dead zone until then. */
+
+/* ====================================================================
+   HOME — port of the home-v4 Obsidian widget (Renovatio V8 shell).
+   Markup + CSS are the widget's own; vault I/O swapped for repo rails.
+   Kanban truth stays shared/kanban.json; every mutation is a commit.
+   ==================================================================== */
+const Home = (() => {
+  const KANBAN_PATH   = 'shared/kanban.json';
+  const QUEUE_PATH    = 'orgs/command-center/data/queue.json';
+  const STREAKS_PATH  = 'orgs/health/data/streaks.json';
+  const HABITS_PATH   = 'shared/habits.json';
+  // widget points at orgs/health/data/workout-log.json — that file moved into
+  // data/workout/ (so the Workout streak reads "—" in Obsidian today). Corrected here.
+  const WORKOUT_LOG_PATH = 'orgs/health/data/workout/workout-log.json';
+  const WORKOUT_LOG_DIR  = 'orgs/health/data/workout/workout-log';
+  const JOURNAL_DIR   = 'orgs/health/journal';
+  const INBOX_DIR     = 'orgs/command-center/inbox';
+  const TRIGGERS_DIR  = 'orgs/command-center/data/triggers';
+  const CALENDAR_SNAPSHOT_PATH = 'orgs/command-center/data/calendar_snapshot.json';
+  const LOG_PATH      = 'shared/actions.log';
+  const DAY = 86400000;
+  const WEEKDAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+  /* ---- repo I/O (replaces app.vault) ---- */
+  async function readJSON(path, dflt) {
+    try { const f = await readFile(path); return f ? f.data : dflt; } catch (e) { return dflt; }
+  }
+  async function readTextFile(path, dflt) {
+    try { const f = await readFile(path); return f ? (typeof f.data === 'string' ? f.data : f.raw) : dflt; }
+    catch (e) { return dflt; }
+  }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function nowStamp() {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}Z`;
+  }
+  function todayISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  /* actions.log is append-only and 200KB+; appending via the Contents API means
+     rewriting the whole blob. Batched: one append per mutation, fire-and-forget,
+     never blocking the UI, and failures are logged not surfaced. */
+  async function appendLog(verb, target, note) {
+    const line = `${nowStamp()} | site | ${verb} | ${target} | ok${note ? ' (' + note + ')' : ''} | ${target}\n`;
+    try {
+      const cur = await readFile(LOG_PATH);
+      const body = (cur && typeof cur.data === 'string' ? cur.data : (cur ? cur.raw : '')) || '';
+      await writeRaw(LOG_PATH, body + line, `log: ${verb} ${target} [site]`);
+    } catch (e) { console.warn('[home] appendLog failed', e); }
+  }
+  function esc(s) { const d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+
+  /* ---- kanban engine (verbatim logic) ---- */
+  let KDB = null, ROOT = null;
+  const DOM_COLORS = { ACAD: ['var(--purple-bg)', 'var(--purple)'], REC: ['var(--gold-bg)', 'var(--gold)'], PROJ: ['var(--teal-bg)', 'var(--teal)'], PERS: ['var(--bg-elevated)', 'var(--text-muted)'] };
+  const LANES = ['now', 'ongoing', 'week', 'next', 'later', 'done'];
+
+  async function loadKanban() { KDB = await readJSON(KANBAN_PATH, null); }
+  async function saveKanban() {
+    KDB.updated_at = nowStamp();
+    KDB.source = 'secundus-site';
+    try {
+      await writeRaw(KANBAN_PATH, JSON.stringify(KDB, null, 2), `kanban: update [site]`);
+      const dot = $('sync-dot'); if (dot) dot.className = 'ok';
+    } catch (e) {
+      console.error('[home] kanban save failed', e);
+      toast('Board save failed — change not committed', 4000);
+      const dot = $('sync-dot'); if (dot) dot.className = 'err';
+      throw e;
+    }
+  }
+  function slugify(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'card'; }
+  function uniqueId(title) {
+    const base = slugify(title);
+    const ids = new Set(KDB.cards.map(c => c.id));
+    if (!ids.has(base)) return base;
+    let n = 2;
+    while (ids.has(`${base}-${n}`)) n++;
+    return `${base}-${n}`;
+  }
+  function byLane(l) { return KDB.cards.filter(c => c.lane === l); }
+  function daysSinceISO(iso) {
+    if (!iso) return null;
+    const then = new Date(iso + 'T00:00:00'), now = new Date(todayISO() + 'T00:00:00');
+    return Math.round((now - then) / DAY);
+  }
+  function dueChip(due) {
+    if (!due) return null;
+    const delta = -daysSinceISO(due);
+    if (delta < 0) return { text: 'OVD', color: 'var(--bad)' };
+    if (delta === 0) return { text: 'today', color: 'var(--bad)' };
+    if (delta <= 2) return { text: delta + 'd', color: 'var(--warn)' };
+    return { text: delta + 'd', color: 'var(--text-muted)' };
+  }
+  function applyBackgroundRules() {
+    let returned = 0;
+    for (const c of KDB.cards) {
+      if (c.lane === 'ongoing' && c.ongoing_since && c.returns_after_days != null) {
+        const elapsed = daysSinceISO(c.ongoing_since);
+        if (elapsed !== null && elapsed >= c.returns_after_days) {
+          c.lane = 'now'; c.ongoing_since = null; c.returns_after_days = null;
+          returned++;
+        }
+      }
+    }
+    let archived = 0;
+    KDB.cards = KDB.cards.filter(c => {
+      if (c.lane === 'done' && c.doneAt) {
+        const elapsed = daysSinceISO(c.doneAt);
+        if (elapsed !== null && elapsed >= 7) { KDB.archive.push(c); archived++; return false; }
+      }
+      return true;
+    });
+    return { returned, archived };
+  }
+  function renderKanban(root = ROOT) {
+    document.querySelectorAll('.k-ghost').forEach(g => g.remove());
+    LANES.forEach(l => {
+      const cards = byLane(l);
+      let html = cards.map(c => {
+        const dc = DOM_COLORS[c.d] || DOM_COLORS.PERS;
+        const chip = dueChip(c.due);
+        const due = chip
+          ? `<span class="kc-due" style="color:${chip.color}">${esc(chip.text)}</span>`
+          : (c.urgent ? `<span class="kc-due" style="color:var(--bad)">!</span>` : '');
+        return `<div class="k-card" data-id="${esc(c.id)}" title="Click to edit &middot; drag to move"><div class="kc-title">${esc(c.t)}</div><div class="kc-meta"><span class="kc-tag" style="background:${dc[0]};color:${dc[1]}">${esc(c.d)}</span>${due}</div></div>`;
+      }).join('');
+      if (l === 'done') html += `<div class="k-archnote">archived (${KDB.archive.length}) &middot; auto after 7d</div>`;
+      root.querySelectorAll(`.k-lane-b[data-lane="${l}"]`).forEach(b => b.innerHTML = html);
+      root.querySelectorAll(`[data-klcount="${l}"]`).forEach(k => k.textContent = '· ' + cards.length);
+    });
+    const nowN = byLane('now').length;
+    const backlogN = byLane('next').length + byLane('later').length + byLane('done').length;
+    const tmB = root.querySelector('#tmBadge'); if (tmB) tmB.textContent = nowN + ' do now';
+    const kc = root.querySelector('#kCount'); if (kc) kc.textContent = KDB.cards.length + ' cards · ' + KDB.archive.length + ' archived';
+    const bc = root.querySelector('#kBacklogCount'); if (bc) bc.textContent = backlogN;
+    return nowN;
+  }
+  async function addCard(lane) {
+    const title = window.prompt('New card — title:');
+    if (!title || !title.trim()) return;
+    const t = title.trim();
+    const card = {
+      id: uniqueId(t), t, note: '', d: 'PERS', lane, due: null, urgent: false,
+      ongoing_since: lane === 'ongoing' ? todayISO() : null,
+      returns_after_days: lane === 'ongoing' ? 7 : null,
+      created: todayISO(), doneAt: null,
+    };
+    KDB.cards.push(card);
+    renderAll();                       // optimistic: the board reacts now, commit follows
+    try { await saveKanban(); await appendLog('EDITED', KANBAN_PATH, `added ${card.id}`); }
+    catch (e) { await reloadKanban(); }
+  }
+  async function editCard(id) {
+    const card = KDB.cards.find(c => c.id === id);
+    if (!card) return;
+    const edited = window.prompt('Edit card (clear text + OK to delete):', card.t);
+    if (edited === null) return;
+    const trimmed = edited.trim();
+    if (!trimmed) {
+      if (window.confirm('Delete this card?')) {
+        KDB.cards = KDB.cards.filter(c => c.id !== id);
+        renderAll();
+        try { await saveKanban(); await appendLog('EDITED', KANBAN_PATH, `deleted ${id}`); }
+        catch (e) { await reloadKanban(); }
+      }
+      return;
+    }
+    card.t = trimmed;
+    renderAll();
+    try { await saveKanban(); await appendLog('EDITED', KANBAN_PATH, `retitled ${id}`); }
+    catch (e) { await reloadKanban(); }
+  }
+  async function moveCard(id, lane) {
+    const card = KDB.cards.find(c => c.id === id);
+    if (!card || card.lane === lane) return;
+    card.lane = lane;
+    card.doneAt = lane === 'done' ? todayISO() : null;
+    if (lane === 'ongoing') { if (!card.ongoing_since) card.ongoing_since = todayISO(); if (card.returns_after_days == null) card.returns_after_days = 7; }
+    else { card.ongoing_since = null; card.returns_after_days = null; }
+    renderAll();
+    try { await saveKanban(); await appendLog('MOVED', KANBAN_PATH, `${id} -> ${lane}`); }
+    catch (e) { await reloadKanban(); }
+  }
+  async function reloadKanban() { await loadKanban(); renderAll(); }
+
+  /* ---- approvals ---- */
+  let QUEUE = [];
+  async function loadQueue() { QUEUE = await readJSON(QUEUE_PATH, []); if (!Array.isArray(QUEUE)) QUEUE = []; }
+  function staged() { return QUEUE.filter(q => q.stage === 'staged'); }
+  async function writeTrigger(action, id) {
+    const path = `${TRIGGERS_DIR}/${action}__${id}.trig`;
+    await writeRaw(path, '', `trigger: ${action} ${id} [site]`);
+    await appendLog('WROTE', path, `${action} ${id}`);
+  }
+  function renderApprovals(root = ROOT) {
+    const box = root.querySelector('#approvalsBody');
+    const badge = root.querySelector('#approvalsBadge');
+    const items = staged();
+    if (badge) badge.textContent = items.length;
+    if (!box) return;
+    if (items.length === 0) { box.innerHTML = `<div class="stub-line">Nothing awaiting you ✓</div>`; return; }
+    box.innerHTML = items.map(q => `
+      <div class="appr-row" data-qid="${esc(q.id)}">
+        <div class="appr-head">
+          <div class="info"><div class="name">${esc(q.task || q.id)}</div><div class="meta">${esc(q.org || '')}</div></div>
+          <span class="ah-chev">▶</span>
+        </div>
+        <div class="appr-detail">
+          ${q.output_path ? `<div class="stub-line">📁 ${esc(q.output_path)}</div>` : ''}
+          <div class="draft-actions">
+            <button class="da-btn da-open" data-approve="${esc(q.id)}">✓ Approve</button>
+            <button class="da-btn da-rej" data-reject="${esc(q.id)}">Reject</button>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  /* ---- scoreboard ---- */
+  function renderScoreboard(root = ROOT) {
+    const box = root.querySelector('#scoreboard');
+    if (!box) return;
+    const seals = staged().length;
+    let overdue = 0, dueToday = 0, due7 = 0;
+    for (const c of KDB.cards) {
+      if (c.lane === 'done' || !c.due) continue;
+      const delta = -daysSinceISO(c.due);
+      if (delta < 0) overdue++;
+      else if (delta === 0) dueToday++;
+      else if (delta <= 7) due7++;
+    }
+    const tiles = [
+      ['bad', seals, 'Seals'], ['bad', overdue, 'Overdue'],
+      ['warn', dueToday, 'Due Today'], ['warn', due7, 'Due 7d'],
+      ['gold', '—', 'Replies'], ['ok', '—', 'Hot Lead'],
+    ];
+    box.innerHTML = tiles.map(([c, n, label]) => `<div class="sb-tile"><div class="sb-bg" style="background:var(--${c})"></div><div class="sb-num" style="color:var(--${c})">${esc(n)}</div><div class="sb-lbl">${esc(label)}</div></div>`).join('');
+    const dk = root.querySelector('#deskCount'); if (dk) dk.textContent = seals + ' seals · ' + (KDB ? byLane('now').length : 0) + ' do now';
+  }
+
+  /* ---- streaks ---- */
+  let HABITS = [], STREAKS = null;
+  function isoOffset(days) { const d = new Date(); d.setDate(d.getDate() + days); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+  function last7Dates() { return Array.from({ length: 7 }, (_, i) => isoOffset(i - 6)); }
+  function currentStreak(dateSet) {
+    let start = 0;
+    if (!dateSet.has(isoOffset(0))) { if (!dateSet.has(isoOffset(-1))) return 0; start = -1; }
+    let n = 0;
+    while (dateSet.has(isoOffset(start - n))) n++;
+    return n;
+  }
+  async function derivedDates(habit) {
+    const set = new Set();
+    if (habit.name === 'Workout') {
+      const log = await readJSON(WORKOUT_LOG_PATH, []);
+      for (const e of (Array.isArray(log) ? log : [])) {
+        if (e && e.date && e.done === true) set.add(String(e.date).slice(0, 10));
+      }
+      /* the cache is rebuilt by the PC widget, so today's site-made entries may not
+         be in it yet — overlay the append-only entry folder (site is a writer too) */
+      try {
+        for (const f of await listDir(WORKOUT_LOG_DIR)) {
+          const m = f.name.match(/^(\d{4}-\d{2}-\d{2})__/);
+          if (m) { const e = await readFile(f.path); if (e && e.data && e.data.done === true) set.add(m[1]); }
+        }
+      } catch (e) {}
+    } else if (habit.name === 'Journal') {
+      try {
+        for (const f of await listDir(JOURNAL_DIR)) {
+          if (/^\d{4}-\d{2}-\d{2}\.md$/.test(f.name)) set.add(f.name.slice(0, 10));
+        }
+      } catch (e) {}
+    }
+    return set;
+  }
+  async function renderStreaks(root = ROOT) {
+    const box = root.querySelector('#streakStrip');
+    if (!box) return;
+    const window7 = last7Dates();
+    let body = '';
+    for (const h of HABITS) {
+      let dateSet;
+      if (h.mode === 'manual') dateSet = new Set((STREAKS.manual_logs && STREAKS.manual_logs[h.name]) || []);
+      else dateSet = await derivedDates(h);
+      const dots = window7.map(d => `<div class="dot-s ${dateSet.has(d) ? 'dot-hit' : 'dot-miss'}"></div>`).join('');
+      const streak = currentStreak(dateSet);
+      const color = streak > 0 ? 'var(--ok)' : 'var(--text-muted)';
+      const count = dateSet.size === 0 ? '—' : streak + 'd';
+      const tap = h.mode === 'manual' ? ` habit-tap" data-habit="${esc(h.name)}" title="Tap to log today` : '"';
+      body += `<div class="streak-row${tap}"><span class="s-label">${esc(h.name)}</span><div class="dots">${dots}</div><span class="s-count" style="color:${color}">${esc(count)}</span></div>`;
+    }
+    box.innerHTML = `<span class="ss-head">Streaks<span class="ss-sub">last 7d &middot; tap Guitar/Drawing/Anki</span></span>` + body;
+  }
+  async function toggleHabitToday(name) {
+    if (!STREAKS.manual_logs) STREAKS.manual_logs = {};
+    const arr = STREAKS.manual_logs[name] || (STREAKS.manual_logs[name] = []);
+    const today = todayISO();
+    const i = arr.indexOf(today);
+    if (i >= 0) arr.splice(i, 1); else { arr.push(today); arr.sort(); }
+    STREAKS.last_refreshed = nowStamp();
+    await renderStreaks();
+    try {
+      await writeRaw(STREAKS_PATH, JSON.stringify(STREAKS, null, 2), `streaks: ${name} ${i >= 0 ? 'un-log' : 'log'} ${today} [site]`);
+      await appendLog('LOGGED', STREAKS_PATH, `${name} ${i >= 0 ? 'un-logged' : 'logged'} ${today}`);
+    } catch (e) { toast('Habit save failed'); }
+  }
+
+  /* ---- quick capture ---- */
+  function capturePath() { return `${INBOX_DIR}/capture-${todayISO()}.md`; }
+  function parseCaptureLines(text) {
+    return String(text || '').split('\n').map(l => l.trim()).filter(l => l.startsWith('- ')).map(l => l.slice(2).trim()).filter(Boolean);
+  }
+  async function saveCapture(text) {
+    const line = text.trim();
+    if (!line) return;
+    const t = new Date();
+    const stamped = `- ${line} (${pad(t.getHours())}:${pad(t.getMinutes())})\n`;
+    const path = capturePath();
+    try {
+      const cur = await readFile(path);
+      const body = cur ? (typeof cur.data === 'string' ? cur.data : cur.raw) : null;
+      await writeRaw(path, body != null ? body + stamped : `# Capture ${todayISO()}\n\n${stamped}`, `capture: 1 line [site]`);
+      await appendLog('WROTE', path, 'captured 1 line');
+    } catch (e) { toast('Capture failed'); }
+    await renderCapture();
+  }
+  async function promoteCapture(text) {
+    const t = text.replace(/\s*\(\d{2}:\d{2}\)\s*$/, '').trim();
+    if (!t) return;
+    const card = {
+      id: uniqueId(t), t, note: 'from capture', d: 'PERS', lane: 'now', due: null, urgent: false,
+      ongoing_since: null, returns_after_days: null, created: todayISO(), doneAt: null,
+    };
+    KDB.cards.push(card);
+    renderAll();
+    try { await saveKanban(); await appendLog('EDITED', KANBAN_PATH, `promoted capture -> card ${card.id}`); }
+    catch (e) { await reloadKanban(); }
+  }
+  async function renderCapture(root = ROOT) {
+    const box = root.querySelector('#capRecent');
+    if (!box) return;
+    const text = await readTextFile(capturePath(), '');
+    const lines = parseCaptureLines(text);
+    if (lines.length === 0) { box.innerHTML = `<div class="stub-line">nothing captured today</div>`; return; }
+    box.innerHTML = lines.slice(-6).reverse().map(l =>
+      `<div class="cap-item"><span class="cap-text">${esc(l)}</span><button class="cap-promote" data-promote="${esc(l)}" title="Promote to a Do Now card">&rarr; card</button></div>`).join('');
+  }
+
+  /* ---- Today card: calendar timeline + gmail brief ---- */
+  function mdTableRow(line) { return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim()); }
+  const MD_TABLE_SEP = /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/;
+  function mdMini(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n');
+    let html = '', inList = false;
+    const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) { closeList(); continue; }
+      if (/^\|.*\|$/.test(line) && i + 1 < lines.length && MD_TABLE_SEP.test(lines[i + 1].trim())) {
+        closeList();
+        const headCells = mdTableRow(line);
+        let j = i + 2;
+        const bodyRows = [];
+        while (j < lines.length && /^\|.*\|$/.test(lines[j].trim())) { bodyRows.push(mdTableRow(lines[j])); j++; }
+        html += '<div class="today-table-wrap"><table class="today-table"><thead><tr>'
+          + headCells.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>'
+          + bodyRows.map(r => '<tr>' + r.map(c => `<td>${esc(c)}</td>`).join('') + '</tr>').join('')
+          + '</tbody></table></div>';
+        i = j - 1;
+        continue;
+      }
+      if (/^#\s+/.test(line)) continue;
+      if (/^##\s+/.test(line)) { closeList(); html += `<div class="today-sub">${esc(line.replace(/^##\s+/, ''))}</div>`; continue; }
+      if (/^-\s+/.test(line)) {
+        if (!inList) { html += '<ul class="today-list">'; inList = true; }
+        let t = esc(line.replace(/^-\s+/, '')).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html += `<li>${t}</li>`;
+        continue;
+      }
+      closeList();
+      let t = esc(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^_(.+)_$/, '<em>$1</em>');
+      html += `<div class="today-note">${t}</div>`;
+    }
+    closeList();
+    return html || '<div class="stub-line">Nothing to show.</div>';
+  }
+  const CAL_GRID_START_MIN = 5 * 60, CAL_GRID_END_MIN = 24 * 60, CAL_ROW_H = 22, CAL_MIN_EV_H = 19;
+  let CAL_DAY_WINDOW = 3;
+  const CAL_DOMAIN_ACCENT = {
+    '9':  { c: 'var(--purple)', cDim: 'var(--purple-dim)' },
+    '11': { c: 'var(--red)',    cDim: 'var(--red-dim)' },
+    '7':  { c: 'var(--teal)',   cDim: 'var(--teal-dim)' },
+  };
+  const CAL_DEFAULT_ACCENT = { c: 'var(--gold)', cDim: 'var(--gold-dim)' };
+  function calAccentFor(colorId) { return CAL_DOMAIN_ACCENT[colorId] || CAL_DEFAULT_ACCENT; }
+  function calDateKey(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+  function calColHeading(d) { return `${WEEKDAYS[d.getDay()].slice(0, 3)} ${d.getDate()}`; }
+  function calPxTop(startMin) { return Math.max(0, ((startMin - CAL_GRID_START_MIN) / 60) * CAL_ROW_H); }
+  function calPxHeight(startMin, endMin) {
+    const s = Math.max(startMin, CAL_GRID_START_MIN), e = Math.min(endMin, CAL_GRID_END_MIN);
+    return Math.max(CAL_MIN_EV_H, ((e - s) / 60) * CAL_ROW_H);
+  }
+  function calLayoutDay(events) {
+    const sorted = events.slice().sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+    const clusters = [];
+    let cur = [], curEnd = -Infinity;
+    for (const ev of sorted) {
+      if (cur.length && ev.startMin >= curEnd) { clusters.push(cur); cur = []; curEnd = -Infinity; }
+      cur.push(ev);
+      curEnd = Math.max(curEnd, ev.endMin);
+    }
+    if (cur.length) clusters.push(cur);
+    const out = [];
+    for (const cluster of clusters) {
+      const laneEnds = [], laneOf = [];
+      for (const ev of cluster) {
+        let lane = laneEnds.findIndex(end => ev.startMin >= end);
+        if (lane === -1) { lane = laneEnds.length; laneEnds.push(ev.endMin); }
+        else laneEnds[lane] = ev.endMin;
+        laneOf.push(lane);
+      }
+      const n = laneEnds.length;
+      cluster.forEach((ev, i) => {
+        const lane = laneOf[i];
+        const gap = n > 1 ? 4 : 0;
+        const width = n > 1 ? (100 - gap * (n - 1)) / n : 100;
+        out.push({ ...ev, left: n > 1 ? lane * (width + gap) : 0, width });
+      });
+    }
+    return out;
+  }
+  function buildCalendarTimeline(snapshot) {
+    const events = (snapshot && Array.isArray(snapshot.events)) ? snapshot.events : [];
+    if (events.length === 0) return `<div class="stub-line">Nothing on the calendar for today or the next ${CAL_DAY_WINDOW - 1} days.</div>`;
+    const today = new Date();
+    const days = Array.from({ length: CAL_DAY_WINDOW }, (_, i) => { const d = new Date(today); d.setDate(d.getDate() + i); return d; });
+    const todayKey = calDateKey(today);
+    const byDay = days.map(d => {
+      const key = calDateKey(d);
+      const dayEvents = events
+        .map(ev => ({ ...ev, s: new Date(ev.start), e: new Date(ev.end) }))
+        .filter(ev => !isNaN(ev.s.getTime()) && !isNaN(ev.e.getTime()) && calDateKey(ev.s) === key)
+        .map(ev => ({ ...ev, startMin: ev.s.getHours() * 60 + ev.s.getMinutes(), endMin: ev.e.getHours() * 60 + ev.e.getMinutes() }));
+      return { date: d, key, isToday: key === todayKey, events: calLayoutDay(dayEvents) };
+    });
+    const gridHeight = ((CAL_GRID_END_MIN - CAL_GRID_START_MIN) / 60) * CAL_ROW_H;
+    const hourLabels = [];
+    for (let m = CAL_GRID_START_MIN; m < CAL_GRID_END_MIN; m += 60) hourLabels.push(`${pad(Math.floor(m / 60))}:00`);
+    const header = `<div class="cal-head-row"><div class="cal-gutter"></div>` +
+      byDay.map(d => `<div class="cal-head-cell${d.isToday ? ' cal-head-today' : ''}">${esc(calColHeading(d.date))}</div>`).join('<div class="cal-head-sp"></div>') +
+      `</div>`;
+    const gutter = `<div class="cal-gutter">` + hourLabels.map(h => `<div class="cal-hour-label">${h}</div>`).join('') + `</div>`;
+    const nowMin = today.getHours() * 60 + today.getMinutes();
+    const cols = byDay.map(d => {
+      const evHtml = d.events.map(ev => {
+        const accent = calAccentFor(ev.colorId);
+        const top = calPxTop(ev.startMin), height = calPxHeight(ev.startMin, ev.endMin);
+        const border = d.isToday ? accent.c : accent.cDim;
+        const cls = d.isToday ? 'cal-ev cal-ev-today' : 'cal-ev cal-ev-future';
+        return `<div class="${cls}" style="top:${top}px;height:${height}px;left:${ev.left}%;width:${ev.width}%;border-left-color:${border}" title="${esc(ev.title)}">${esc(ev.title)}</div>`;
+      }).join('');
+      const nowLine = (d.isToday && nowMin >= CAL_GRID_START_MIN && nowMin < CAL_GRID_END_MIN)
+        ? `<div class="cal-now-line" style="top:${calPxTop(nowMin)}px"><span class="cal-now-dot"></span><span class="cal-now-lbl">NOW</span></div>` : '';
+      return `<div class="cal-col${d.isToday ? ' cal-col-today' : ' cal-col-future'}">${evHtml}${nowLine}</div>`;
+    }).join('<div class="cal-col-sp"></div>');
+    return header + `<div class="cal-scroll"><div class="cal-row" style="height:${gridHeight}px">${gutter}${cols}</div></div>`;
+  }
+  const GM_MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const GM_ORDER = ['Recruiting','Networking','Academic','Health','Personal ops','Community'];
+  const GM_CAT = {
+    'Recruiting':   { code: 'REC', c: 'var(--red)' },
+    'Networking':   { code: 'NET', c: 'var(--blue)' },
+    'Academic':     { code: 'ACA', c: 'var(--purple)' },
+    'Health':       { code: 'HLT', c: 'var(--teal)' },
+    'Personal ops': { code: 'OPS', c: 'var(--gray)' },
+    'Community':    { code: 'COM', c: 'var(--green)' },
+  };
+  const GM_VERB = { REPLY: 'var(--blue)', DO: 'var(--gold)', RSVP: 'var(--green)', READ: 'var(--text-muted)' };
+  const GM_TIER = { urgent: 'var(--red)', soon: 'var(--gold)', far: 'var(--text-muted)', none: 'var(--text-muted)' };
+  function gmDeadline(it, now) {
+    if (!it.due) return { txt: '', tier: 'none' };
+    const d = new Date(it.due);
+    if (isNaN(d.getTime())) return { txt: '', tier: 'none' };
+    const sod = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+    const k = Math.round((sod(d) - sod(now)) / 86400000);
+    if (k < 0) return { txt: (-k) + 'd late', tier: 'urgent' };
+    if (k === 0) return it.night ? { txt: 'Tonight', tier: 'urgent' }
+      : (it.time ? { txt: String(it.time), tier: 'urgent' } : { txt: 'Today', tier: 'urgent' });
+    if (k === 1) return { txt: 'Tmrw', tier: 'soon' };
+    if (k <= 6) { const wd = WEEKDAYS[d.getDay()]; return { txt: wd.charAt(0) + wd.slice(1, 3).toLowerCase(), tier: 'soon' }; }
+    return { txt: GM_MO[d.getMonth()] + ' ' + d.getDate(), tier: 'far' };
+  }
+  function gmRow(it, now) {
+    const f = gmDeadline(it, now);
+    const due = f.txt ? `<span class="gm-due" style="color:${GM_TIER[f.tier]}">${esc(f.txt)}</span>` : '';
+    const verb = String(it.verb || '').padEnd(5);
+    return `<div class="gm-row"><span class="gm-vb" style="color:${GM_VERB[it.verb] || 'var(--text)'}">${esc(verb)}</span>`
+      + `<span class="gm-tx">${esc(it.ttl || '')} <span class="gm-sn">(${esc(it.snd || '')})</span></span>${due}</div>`;
+  }
+  function gmSection(items, now) {
+    return GM_ORDER.map(cat => {
+      const g = items.filter(i => i.cat === cat);
+      if (!g.length) return '';
+      const c = (GM_CAT[cat] || {}).c || 'var(--text-muted)';
+      return `<div class="gm-band" style="border-left-color:${c}">${g.map(it => gmRow(it, now)).join('')}</div>`;
+    }).join('');
+  }
+  function buildGmailBrief(data) {
+    const now = new Date();
+    const items = Array.isArray(data.items) ? data.items : [];
+    const needs = items.filter(i => i.sec === 'needs');
+    const opt = items.filter(i => i.sec === 'opt');
+    let html = '';
+    if (needs.length) html += `<div class="gm-sec">Needs you</div>${gmSection(needs, now)}`;
+    if (opt.length) html += `<div class="gm-sec gm-opt">Optional · on a clock</div>${gmSection(opt, now)}`;
+    if (!needs.length && !opt.length) html += `<div class="gm-empty">Nothing needs a decision today.</div>`;
+    if (Array.isArray(data.awaiting) && data.awaiting.length)
+      html += `<div class="gm-await">Awaiting others: ${data.awaiting.map(a => `${esc(a.ttl)} (${esc(a.snd)})`).join(' · ')}</div>`;
+    html += `<div class="gm-legend">${GM_ORDER.map(c => `<span><span class="gm-sw" style="background:${GM_CAT[c].c}"></span>${GM_CAT[c].code}</span>`).join('')}</div>`;
+    const dropped = (data.counts && data.counts.dropped) || 0;
+    if (dropped) html += `<div class="gm-foot">— dropped ${dropped} newsletters / receipts / no-action digests</div>`;
+    return html;
+  }
+  let INBOX_FILES = null;
+  async function inboxFiles() { if (!INBOX_FILES) INBOX_FILES = await listDir(INBOX_DIR).catch(() => []); return INBOX_FILES; }
+  async function findLatest(re) {
+    const files = (await inboxFiles()).filter(f => re.test(f.name));
+    if (!files.length) return null;
+    files.sort((a, b) => (a.name < b.name ? 1 : -1));
+    return files[0];
+  }
+  async function renderToday(root = ROOT) {
+    const body = root.querySelector('#todayBody');
+    if (!body) return;
+    const snapshot = await readJSON(CALENDAR_SNAPSHOT_PATH, null);
+    const calBody = snapshot ? buildCalendarTimeline(snapshot)
+      : '<div class="stub-line">No calendar snapshot yet — calendar-briefing hasn’t run.</div>';
+    let gmailBody, gmailLabel = 'Gmail';
+    const jsonFile = await findLatest(/^gmail-brief-\d{4}-\d{2}-\d{2}\.json$/);
+    if (jsonFile) {
+      try {
+        const f = await readFile(jsonFile.path);
+        gmailBody = buildGmailBrief(f.data);
+        gmailLabel = `Gmail (${jsonFile.name.replace('gmail-brief-', '').replace('.json', '')})`;
+      } catch (e) { gmailBody = '<div class="stub-line">Gmail brief JSON failed to parse.</div>'; }
+    } else {
+      const briefFile = await findLatest(/^gmail-brief-\d{4}-\d{2}-\d{2}\.md$/);
+      if (briefFile) {
+        const raw = await readTextFile(briefFile.path, '');
+        gmailBody = mdMini(String(raw).replace(/^---[\s\S]*?---\n?/, ''));
+        gmailLabel = `Gmail (${briefFile.name.replace('gmail-brief-', '').replace('.md', '')})`;
+      } else gmailBody = '<div class="stub-line">No Gmail briefing yet — gmail-briefing hasn’t run.</div>';
+    }
+    body.innerHTML =
+      `<div class="today-block"><div class="today-block-h">Calendar</div><div class="today-block-b cal-wrap">${calBody}</div></div>` +
+      `<div class="today-block"><div class="today-block-h">${esc(gmailLabel)}</div><div class="today-block-b">${gmailBody}</div></div>`;
+    const scrollBox = body.querySelector('.cal-scroll');
+    const nowLine = body.querySelector('.cal-now-line');
+    if (scrollBox && nowLine) scrollBox.scrollTop = Math.max(0, parseFloat(nowLine.style.top) - 80);
+    const tag = root.querySelector('#todayDateTag');
+    if (tag) { const d = new Date(); tag.textContent = `${WEEKDAYS[d.getDay()]} ${todayISO().slice(5)}`; }
+  }
+
+  /* ---- view switching (WORKOUT/DIET host the ported Health apps) ---- */
+  const VIEWS = ['home', 'todo', 'pipeline', 'academics', 'projects', 'workout', 'diet', 'builder'];
+  function showView(root, v) {
+    VIEWS.forEach(id => { const el2 = root.querySelector('#view-' + id); if (el2) el2.hidden = (id !== v); });
+    root.querySelectorAll('.nav-btn[data-view]').forEach(b => b.classList.toggle('active', b.getAttribute('data-view') === v));
+    const bare = (v === 'workout' || v === 'diet');
+    const strip = root.querySelector('#streakStrip'); if (strip) strip.hidden = bare;
+    const quote = root.querySelector('.quote-bar');   if (quote) quote.hidden = bare;
+    localStorage.setItem('secundus.view', v);
+    if (v === 'workout') Workout.mount(root.querySelector('#workoutBody'));
+    if (v === 'diet')    Food.mount(root.querySelector('#dietBody'));
+    window.scrollTo(0, 0);
+  }
+
+  const QUOTES = [
+    { t: 'The Wheel of Time turns, and Ages come and pass, leaving memories that become legend.', s: 'The Wheel of Time' },
+    { t: 'Duty is heavier than a mountain, death lighter than a feather.', s: 'The Wheel of Time' },
+    { t: 'There are no endings to the turning of the Wheel of Time. But it was an ending.', s: 'The Wheel of Time' },
+    { t: 'All we have to decide is what to do with the time that is given us.', s: 'The Fellowship of the Ring' },
+    { t: 'Even the smallest person can change the course of the future.', s: 'The Fellowship of the Ring' },
+    { t: 'Faithless is he that says farewell when the road darkens.', s: 'The Lord of the Rings' },
+    { t: 'All human wisdom is contained in these two words — Wait and Hope.', s: 'The Count of Monte Cristo' },
+    { t: 'Life is a storm. You will bask in the sunlight one moment, be shattered on the rocks the next.', s: 'The Count of Monte Cristo' },
+    { t: 'There is neither happiness nor misery in the world; only the comparison of one state with another.', s: 'The Count of Monte Cristo' },
+  ];
+
+  function renderAll(root = ROOT) { renderKanban(root); renderApprovals(root); renderScoreboard(root); }
+
+  function attachListeners(root) {
+    root.addEventListener('click', function (e) {
+      const t = e.target;
+      const h = t.closest('.domain-card-h');
+      if (h) { const body = h.nextElementSibling, chev = h.querySelector('.chevron'); if (body && body.classList.contains('domain-card-b')) { body.classList.toggle('collapsed'); if (chev) chev.classList.toggle('collapsed'); } return; }
+      const ah = t.closest('.appr-head');
+      if (ah) { ah.classList.toggle('open'); ah.nextElementSibling.classList.toggle('open'); return; }
+      const th = t.closest('.term-head');
+      if (th) { const tb = th.nextElementSibling; tb.classList.toggle('open'); th.querySelector('.tcar').innerHTML = tb.classList.contains('open') ? '&#9660;' : '&#9654;'; return; }
+      if (t.closest('#metricsBtn')) { t.closest('#metricsBtn').classList.toggle('on'); root.querySelector('#scoreboard').classList.toggle('open'); return; }
+      const rf = t.closest('.sb-refresh');
+      if (rf) { rf.classList.add('spin'); INBOX_FILES = null; renderToday(root).finally(() => setTimeout(() => rf.classList.remove('spin'), 400)); return; }
+      const dt = t.closest('.cal-day-toggle');
+      if (dt) { CAL_DAY_WINDOW = CAL_DAY_WINDOW === 3 ? 2 : 3; dt.textContent = CAL_DAY_WINDOW + 'd'; renderToday(root); return; }
+      const nb = t.closest('.nav-btn[data-view]');
+      if (nb) { showView(root, nb.getAttribute('data-view')); return; }
+      if (t.closest('[data-open-board]')) { showView(root, 'todo'); return; }
+      const ad = t.closest('.kl-add');
+      if (ad) { addCard(ad.getAttribute('data-lane')); return; }
+      const approveBtn = t.closest('[data-approve]');
+      if (approveBtn) { const id = approveBtn.getAttribute('data-approve'); approveBtn.textContent = '✓ queued'; approveBtn.disabled = true; writeTrigger('approve', id).then(() => loadQueue().then(() => renderApprovals(root))).catch(() => toast('Trigger write failed')); return; }
+      const rejectBtn = t.closest('[data-reject]');
+      if (rejectBtn) { const id = rejectBtn.getAttribute('data-reject'); rejectBtn.textContent = '✗ queued'; rejectBtn.disabled = true; writeTrigger('reject', id).then(() => loadQueue().then(() => renderApprovals(root))).catch(() => toast('Trigger write failed')); return; }
+      const hab = t.closest('.habit-tap');
+      if (hab) { toggleHabitToday(hab.getAttribute('data-habit')); return; }
+      if (t.closest('#capSave')) {
+        const inp = root.querySelector('#capInput');
+        if (inp && inp.value.trim()) { const v = inp.value; inp.value = ''; saveCapture(v); }
+        return;
+      }
+      const promote = t.closest('[data-promote]');
+      if (promote) { promoteCapture(promote.getAttribute('data-promote')); return; }
+      const kcard = t.closest('.k-card');
+      if (kcard) { if (kcard.dataset.dragged) { delete kcard.dataset.dragged; return; } editCard(kcard.getAttribute('data-id')); return; }
+      if (t.closest('#kDrawer')) {
+        const row = root.querySelector('#kBacklogRow');
+        row.hidden = !row.hidden;
+        const car = root.querySelector('#kDrawerCar'); if (car) car.innerHTML = row.hidden ? '&#9654;' : '&#9660;';
+        const hint = root.querySelector('#kDrawerHint'); if (hint) hint.textContent = row.hidden ? 'expand' : 'collapse';
+        return;
+      }
+    });
+    root.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      const inp = e.target.closest && e.target.closest('#capInput');
+      if (!inp || !inp.value.trim()) return;
+      e.preventDefault();
+      const v = inp.value; inp.value = ''; saveCapture(v);
+    });
+    /* pointer-based drag & drop — same as the widget (works on touch too) */
+    const DRAG_THRESHOLD = 5;
+    let drag = null;
+    function laneUnder(x, y) {
+      const under = document.elementFromPoint(x, y);
+      return under && under.closest ? under.closest('.k-lane-b') : null;
+    }
+    function clearDragover() { root.querySelectorAll('.k-lane-b.dragover').forEach(b => b.classList.remove('dragover')); }
+    function sweepOrphanGhosts() { document.querySelectorAll('.k-ghost').forEach(g => g.remove()); }
+    root.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      const c = e.target.closest && e.target.closest('.k-card');
+      if (!c) return;
+      sweepOrphanGhosts();
+      drag = { id: c.getAttribute('data-id'), el: c, startX: e.clientX, startY: e.clientY, moved: false, ghost: null, pointerId: e.pointerId };
+    });
+    root.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD) return;
+        drag.moved = true;
+        drag.el.classList.add('dragging');
+        try { drag.el.setPointerCapture(drag.pointerId); } catch (x) {}
+        const g = drag.el.cloneNode(true);
+        g.classList.add('k-ghost');
+        g.style.cssText = `position:fixed;pointer-events:none;z-index:9999;opacity:.9;width:${drag.el.offsetWidth}px`;
+        document.body.appendChild(g);
+        drag.ghost = g;
+      }
+      if (drag.ghost) { drag.ghost.style.left = (e.clientX + 8) + 'px'; drag.ghost.style.top = (e.clientY + 8) + 'px'; }
+      clearDragover();
+      const lane = laneUnder(e.clientX, e.clientY);
+      if (lane) lane.classList.add('dragover');
+    });
+    function finishDrag(e) {
+      if (!drag) return;
+      const d = drag; drag = null;
+      if (d.ghost) d.ghost.remove();
+      d.el.classList.remove('dragging');
+      clearDragover();
+      if (!d.moved) return;
+      d.el.dataset.dragged = '1';
+      const lane = laneUnder(e.clientX, e.clientY);
+      if (lane) moveCard(d.id, lane.getAttribute('data-lane'));
+    }
+    root.addEventListener('pointerup', finishDrag);
+    root.addEventListener('pointercancel', finishDrag);
+    root.addEventListener('lostpointercapture', finishDrag);
+  }
+
+  const MARKUP = `
+<div class="topbar">
+  <span class="chi-rho">☧</span>
+  <h1>Secundus</h1>
+  <div class="sep"></div>
+  <div class="date"></div>
+  <nav class="nav">
+    <button class="nav-btn active" data-view="home"><div class="nv-dot" style="background:var(--gold)"></div>HOME</button>
+    <button class="nav-btn" data-view="todo"><div class="nv-dot" style="background:var(--purple)"></div>TO-DO</button>
+    <button class="nav-btn" data-view="pipeline"><div class="nv-dot" style="background:var(--gold)"></div>PIPELINE</button>
+    <button class="nav-btn" data-view="academics"><div class="nv-dot" style="background:var(--purple)"></div>ACADEMICS</button>
+    <button class="nav-btn" data-view="projects"><div class="nv-dot" style="background:var(--teal)"></div>PROJECTS</button>
+    <button class="nav-btn" data-view="workout"><div class="nv-dot" style="background:var(--red)"></div>WORKOUT</button>
+    <button class="nav-btn" data-view="diet"><div class="nv-dot" style="background:var(--teal)"></div>DIET</button>
+    <button class="nav-btn" data-view="builder"><div class="nv-dot" style="background:var(--gold)"></div>BUILDER</button>
+  </nav>
+  <div class="right">
+    <button class="toggle-btn" id="metricsBtn">☰ METRICS</button>
+    <span id="sync-label"></span>
+    <span id="sync-dot" title="repo connection"></span>
+  </div>
+</div>
+
+<div class="quote-bar">
+  <span class="text" id="quoteText"></span>
+  <span class="src" id="quoteSrc"></span>
+</div>
+
+<div class="streak-strip" id="streakStrip">
+  <span class="ss-head">Streaks<span class="ss-sub">last 7d</span></span>
+</div>
+
+<div class="scoreboard" id="scoreboard"></div>
+
+<div class="layout" id="view-home">
+<div class="main">
+  <div class="command-row">
+  <div class="desk-zone">
+    <div class="desk-head">
+      <span class="dh-icon">⚔</span>
+      <h2>Your Desk</h2>
+      <span class="dh-sub">tackle these first</span>
+      <span class="dh-count" id="deskCount">…</span>
+    </div>
+    <div class="domain-card">
+      <div class="domain-card-h">
+        <div class="d-bar" style="background:var(--gold)"></div>
+        <h3 style="color:var(--gold)">Awaiting Your Seal</h3>
+        <span class="type-pill pill-review">REVIEW</span>
+        <span class="d-badge" id="approvalsBadge" style="background:var(--bad-dim);color:var(--bad)">0</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="domain-card-b"><div id="approvalsBody"></div></div>
+    </div>
+    <div class="domain-card todo-mini" id="todoMini">
+      <div class="todo-mini-h">
+        <div class="d-bar" style="background:var(--purple)"></div>
+        <h3>To-Do</h3>
+        <span class="type-pill pill-do">YOURS</span>
+        <span class="d-badge" style="background:var(--bg-elevated);color:var(--text-muted)" id="tmBadge">…</span>
+        <span class="tm-open" data-open-board="">full board + backlog ↗</span>
+      </div>
+      <div class="k-row">
+        <div class="k-lane act">
+          <div class="k-lane-h">Do Now <span class="kl-count" data-klcount="now"></span><button class="kl-add" data-lane="now" title="Add card">+</button></div>
+          <div class="k-lane-b" data-lane="now"></div>
+        </div>
+        <div class="k-lane act">
+          <div class="k-lane-h">Ongoing <span class="kl-count" data-klcount="ongoing"></span><button class="kl-add" data-lane="ongoing" title="Add card">+</button></div>
+          <div class="k-lane-b" data-lane="ongoing"></div>
+        </div>
+        <div class="k-lane act">
+          <div class="k-lane-h">This Week <span class="kl-count" data-klcount="week"></span><button class="kl-add" data-lane="week" title="Add card">+</button></div>
+          <div class="k-lane-b" data-lane="week"></div>
+        </div>
+        <div class="k-lane" data-lane="done">
+          <div class="k-lane-h">Done <span class="kl-count" data-klcount="done"></span></div>
+          <div class="k-lane-b" data-lane="done"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="desk-rail">
+    <div class="sb-section">
+      <h4 style="color:var(--teal)">Quick Capture <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted);font-weight:400;letter-spacing:0">&rarr; inbox</span></h4>
+      <div class="cap-row">
+        <input class="cap-input" id="capInput" type="text" placeholder="Capture a thought, then Enter or +">
+        <button class="cap-save" id="capSave" title="Save to inbox">+</button>
+      </div>
+      <div class="cap-recent" id="capRecent"></div>
+    </div>
+    <div class="sb-section">
+      <h4 style="color:var(--gold)">Today
+        <span style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted);font-weight:400;letter-spacing:0" id="todayDateTag"></span>
+          <button class="cal-day-toggle" id="calDayToggle" title="Toggle 2-day / 3-day calendar view">3d</button>
+          <button class="sb-refresh" title="Re-read Gmail + Calendar briefings">⟳</button>
+        </span>
+      </h4>
+      <div id="todayBody"></div>
+    </div>
+    <div class="sb-section">
+      <h4 style="color:var(--purple)">This Week <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-muted);font-weight:400;letter-spacing:0">resolve by date</span></h4>
+      <div class="stub-line">Deadline feed &mdash; Phase 6</div>
+    </div>
+  </aside>
+  </div>
+
+  <div class="footer-strip">
+    <div class="foot-row">
+      <div class="sb-section">
+        <h4 style="color:var(--gold)">Builder</h4>
+        <div class="stub-line">Pulse queue status &mdash; Phase 5</div>
+      </div>
+      <div class="sb-section">
+        <h4 style="color:var(--text-secondary)">System</h4>
+        <div class="stub-line">Pulse system status &mdash; Phase 5</div>
+      </div>
+    </div>
+    <div class="term">
+      <div class="term-head" id="termHead">
+        <div class="tdot"></div>
+        <span class="tsum">System log &mdash; full check-tab in Phase 7</span>
+        <span class="tcar">&#9654;</span>
+      </div>
+      <div class="term-body">
+        <div class="stub-line" style="padding:8px 11px">See /log or orgs/command-center/index.md for the current action log.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="layout" id="view-todo" hidden="">
+<div class="main">
+  <div class="desk-zone">
+    <div class="desk-head">
+      <span class="dh-icon">▤</span>
+      <h2>To-Do</h2>
+      <span class="dh-sub">drag cards between lanes · saved to the repo</span>
+      <span class="dh-count" id="kCount">…</span>
+    </div>
+    <div class="k-row">
+      <div class="k-lane act" data-lane="now">
+        <div class="k-lane-h">Do Now <span class="kl-count" data-klcount="now"></span><button class="kl-add" data-lane="now" title="Add card">+</button></div>
+        <div class="k-lane-b" data-lane="now"></div>
+      </div>
+      <div class="k-lane act" data-lane="ongoing">
+        <div class="k-lane-h">Ongoing <span class="kl-count" data-klcount="ongoing"></span><button class="kl-add" data-lane="ongoing" title="Add card">+</button></div>
+        <div class="k-lane-b" data-lane="ongoing"></div>
+      </div>
+      <div class="k-lane act" data-lane="week">
+        <div class="k-lane-h">This Week <span class="kl-count" data-klcount="week"></span><button class="kl-add" data-lane="week" title="Add card">+</button></div>
+        <div class="k-lane-b" data-lane="week"></div>
+      </div>
+    </div>
+    <div class="k-drawer" id="kDrawer"><span><span id="kDrawerCar">▼</span>&nbsp; Backlog — Next · Later · Done (<span id="kBacklogCount"></span>)</span><span id="kDrawerHint">collapse</span></div>
+    <div class="k-row" id="kBacklogRow">
+      <div class="k-lane" data-lane="next">
+        <div class="k-lane-h">Next <span class="kl-count" data-klcount="next"></span><button class="kl-add" data-lane="next" title="Add card">+</button></div>
+        <div class="k-lane-b" data-lane="next"></div>
+      </div>
+      <div class="k-lane" data-lane="later">
+        <div class="k-lane-h">Later <span class="kl-count" data-klcount="later"></span><button class="kl-add" data-lane="later" title="Add card">+</button></div>
+        <div class="k-lane-b" data-lane="later"></div>
+      </div>
+      <div class="k-lane" data-lane="done">
+        <div class="k-lane-h">Done <span class="kl-count" data-klcount="done"></span></div>
+        <div class="k-lane-b" data-lane="done"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="layout" id="view-pipeline" hidden>
+<div class="main"><div class="seal-panel"><div class="seal-glyph">&#9775;</div><div class="seal-title">Pipeline</div><div class="seal-sub">RENOVATIO &middot; coming soon</div></div></div>
+</div>
+<div class="layout" id="view-academics" hidden>
+<div class="main"><div class="seal-panel"><div class="seal-glyph">&#9775;</div><div class="seal-title">Academics</div><div class="seal-sub">RENOVATIO &middot; coming soon</div></div></div>
+</div>
+<div class="layout" id="view-projects" hidden>
+<div class="main"><div class="seal-panel"><div class="seal-glyph">&#9775;</div><div class="seal-title">Projects</div><div class="seal-sub">RENOVATIO &middot; coming soon</div></div></div>
+</div>
+<div class="layout" id="view-workout" hidden><div class="main"><div id="workoutBody"></div></div></div>
+<div class="layout" id="view-diet" hidden><div class="main"><div id="dietBody"></div></div></div>
+<div class="layout" id="view-builder" hidden>
+<div class="main"><div class="seal-panel"><div class="seal-glyph">&#9775;</div><div class="seal-title">Builder</div><div class="seal-sub">RENOVATIO &middot; coming soon</div></div></div>
+</div>
+`;
+
+  let mounted = false;
+  async function mount() {
+    if (mounted) return;
+    const root = $('home-v4-root');
+    root.innerHTML = MARKUP;
+    ROOT = root;
+    await verifyConnection();
+
+    await loadKanban();
+    if (!KDB) {
+      root.innerHTML = '<div class="stub-line" style="padding:20px">shared/kanban.json not found in ' + esc(store.repo) + '.</div>';
+      return;
+    }
+    mounted = true;
+    await loadQueue();
+
+    const habitsDoc = await readJSON(HABITS_PATH, null);
+    HABITS = habitsDoc && Array.isArray(habitsDoc.habits) ? habitsDoc.habits
+      : [{ name: 'Workout', mode: 'derived', source: WORKOUT_LOG_PATH }, { name: 'Guitar', mode: 'manual' }, { name: 'Drawing', mode: 'manual' }, { name: 'Anki', mode: 'manual' }, { name: 'Journal', mode: 'derived', source: JOURNAL_DIR }];
+    STREAKS = await readJSON(STREAKS_PATH, {}) || {};
+    if (!STREAKS.manual_logs) STREAKS.manual_logs = {};
+
+    const bg = applyBackgroundRules();
+    if (bg.returned || bg.archived) {
+      try {
+        await saveKanban();
+        if (bg.returned) await appendLog('MOVED', KANBAN_PATH, `${bg.returned} ongoing card(s) auto-returned to now`);
+        if (bg.archived) await appendLog('MOVED', KANBAN_PATH, `${bg.archived} done card(s) auto-archived (7d)`);
+      } catch (e) {}
+    }
+
+    const dateEl = root.querySelector('.topbar .date');
+    if (dateEl) { const d = new Date(); dateEl.textContent = `${todayISO()} ${WEEKDAYS[d.getDay()]}`; }
+    const q = QUOTES[Math.floor(Date.now() / DAY) % QUOTES.length];
+    const qt = root.querySelector('#quoteText'); if (qt) qt.textContent = '“' + q.t + '”';
+    const qs = root.querySelector('#quoteSrc'); if (qs) qs.textContent = '— ' + q.s;
+
+    renderAll(root);
+    attachListeners(root);
+    showView(root, localStorage.getItem('secundus.view') || 'home');
+    renderStreaks(root);
+    renderCapture(root);
+    renderToday(root);
+  }
+
+  return { mount };
+})();
 /* PWA install support — passthrough worker, no caching (updates stay instant) */
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -1085,9 +1984,8 @@ const Workout = (() => {
     sessionBar(host, d.key);
   }
 
-  async function mount() {
-    if (mounted) return;
-    const container = $("view-workout");
+  async function mount(container) {
+    if (mounted || !container) return;
     container.textContent = "";
     root = el(container, "div", "wkt");
     const loading = el(root, "div", "sub", "Loading week from repo…");
@@ -1181,9 +2079,8 @@ const Food = (() => {
   }
   const writeJSON = (path, obj, msg) => writeRaw(path, JSON.stringify(obj, null, 2) + "\n", msg);
 
-  async function mount() {
-    if (mounted) return;
-    const container = $("view-food");
+  async function mount(container) {
+    if (mounted || !container) return;
     container.empty();
     const boot = container.createDiv({ cls: "food" });
     const loading = boot.createDiv({ text: "Loading kitchen from repo…" });
@@ -2383,6 +3280,9 @@ const Food = (() => {
 
   return { mount };
 })();
+
+/* ---- start ---- */
+if (store.pat && store.repo) boot();
 </script>
 </body>
 </html>
