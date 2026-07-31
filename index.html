@@ -164,6 +164,248 @@
     .wkt .mcname{font-size:var(--fs-lg)}
     .wkt .mcctrl{gap:16px}
   }
+
+  /* ---------- Food · Renovatio skin (ported from Food.md) ---------- */
+  .food{--bord:var(--hairline);--txt:var(--fg);--warn:#c45c4a;--purple:#8b5a9f;
+   color:var(--txt);font-family:var(--body);font-size:15px;line-height:1.45;
+   max-width:100%;width:100%;container-type:inline-size}
+  .food *{box-sizing:border-box}
+  .food button{font-family:inherit}
+  .food .serif{font-family:var(--serif)}
+  .food .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .food .hdr{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;
+   border-bottom:1px solid var(--bord);padding-bottom:16px;margin-bottom:18px}
+  .food .kick{font-family:var(--mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--crimson);margin-bottom:6px}
+  .food .brand{font-family:var(--serif);font-weight:700;font-size:30px;line-height:1;color:var(--gold)}
+  .food .hr{display:flex;flex-wrap:wrap;gap:20px}
+  .food .tpill{display:flex;align-items:baseline;gap:7px}
+  .food .tpill .tl{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint)}
+  .food .tpill .tv{font-family:var(--mono);font-size:14px;color:var(--gold)}
+  .food .filters{display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--bord);padding-bottom:16px;margin-bottom:18px}
+  .food .srow{display:flex;align-items:center;gap:10px}
+  .food .searchwrap{position:relative;flex:1}
+  .food .search{width:100%;font-family:var(--mono);font-size:13px;color:var(--txt);
+   background:var(--card);border:1px solid var(--bord);border-radius:2px;padding:9px 12px;outline:none}
+  .food .search::placeholder{color:var(--faint)}
+  .food .search:focus{border-color:var(--gold-dim)}
+  .food .resetchip{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);
+   border:1px solid var(--bord);border-radius:2px;padding:9px 11px;cursor:pointer;white-space:nowrap}
+  .food .resetchip:hover{border-color:var(--warn);color:var(--warn)}
+  .food .chipwrap{display:flex;flex-direction:column;gap:10px}
+  .food .chiprow,.food .numrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+  .food .chiprow .flabel,.food .numrow .flabel{width:62px;flex-shrink:0;white-space:nowrap}
+  .food .flabel{font-family:var(--mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);margin-right:2px}
+  .food .pill{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:1px;text-transform:uppercase;
+   padding:6px 11px;border-radius:2px;cursor:pointer;color:var(--dim);border:1px solid var(--bord);background:transparent;user-select:none}
+  .food .pill:hover{border-color:var(--gold-dim);color:var(--txt)}
+  .food .pill[data-on="1"]{color:var(--gold);background:var(--gold-wash);border-color:var(--gold-dim)}
+  .food .numf{display:flex;align-items:center;gap:6px;border:1px solid var(--bord);border-radius:2px;padding:5px 9px}
+  .food .numf[data-on="1"]{border-color:var(--gold-dim);background:var(--gold-wash)}
+  .food .numf .nfl{font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
+  .food .numf .nfi{width:56px;background:transparent;border:none;outline:none;color:var(--txt);text-align:right;
+   font-family:var(--mono);font-size:11px;-moz-appearance:textfield}
+  .food .numf .nfi::-webkit-inner-spin-button,.food .numf .nfi::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+  .food .layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:22px;align-items:start}
+  @container (max-width:820px){.food .layout{grid-template-columns:1fr}}
+  .food .maincol{display:flex;flex-direction:column;gap:30px;min-width:0}
+  .food .carousel{position:relative;padding:0 40px}
+  .food .carhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+  .food .carttl{font-family:var(--serif);font-size:13px;letter-spacing:3px;text-transform:uppercase;color:var(--gold)}
+  .food .carnum{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--faint)}
+  .food .carvp{overflow:hidden;border:1px solid var(--bord);border-radius:4px;background:var(--card);touch-action:pan-y}
+  .food .cartrack{display:flex;transition:transform .5s ease}
+  .food .carslide{width:100%;flex:0 0 100%}
+  .food .carbtn{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+   border:1px solid var(--bord);border-radius:2px;background:var(--bg);color:var(--gold);cursor:pointer;font-size:18px;z-index:5}
+  .food .carbtn:hover{border-color:var(--gold-dim);background:var(--card)}
+  .food .carbtn.prev{left:0} .food .carbtn.next{right:0}
+  .food .cardots{display:flex;justify-content:center;gap:7px;margin-top:14px}
+  .food .cardot{height:5px;width:5px;border-radius:99px;background:var(--faint);cursor:pointer;transition:all .3s}
+  .food .cardot[data-on="1"]{width:22px;background:var(--gold)}
+  .food .carempty{border:1px solid var(--bord);border-radius:4px;background:var(--card);padding:40px;text-align:center;color:var(--dim);font-size:13px}
+  .food .library .libhead{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--bord);padding-bottom:8px;margin-bottom:14px}
+  .food .libttl{font-family:var(--serif);font-size:13px;letter-spacing:3px;text-transform:uppercase;color:var(--gold)}
+  .food .libnum{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--faint)}
+  .food .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+  .food .rcard{background:var(--card);border:1px solid var(--bord);border-radius:4px;display:flex;flex-direction:column;overflow:hidden}
+  .food .rcard:hover{border-color:var(--gold-dim)}
+  .food .rcard.feat{border-radius:0;border:none}
+  .food .rcbody{padding:16px;display:flex;flex-direction:column;gap:9px}
+  .food .rcard.feat .rcbody{padding:22px}
+  .food .rmeta2{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim)}
+  .food .rmeta2 .rrole{color:var(--gold)}
+  .food .rmeta2 .rcuis{color:var(--faint)}
+  .food .rmeta2 .dot{color:var(--faint)}
+  .food .rcostline{display:flex;flex-wrap:wrap;align-items:baseline;gap:7px;font-family:var(--mono);font-size:11px;letter-spacing:.3px}
+  .food .rcostline .rcost{color:var(--done);white-space:nowrap}
+  .food .rcostline .rprep{color:var(--dim)}
+  .food .rcostline .dot{color:var(--faint)}
+  .food .rtitlebtn{display:block;width:100%;text-align:left;cursor:pointer;color:inherit}
+  .food .rname{font-family:var(--serif);font-size:17px;font-weight:700;line-height:1.25;white-space:normal;overflow-wrap:anywhere}
+  .food .rsubt{font-family:var(--mono);font-size:10.5px;letter-spacing:.5px;color:var(--dim);margin-top:3px}
+  .food .msubt{font-family:var(--mono);font-size:12px;letter-spacing:.5px;color:var(--dim);margin-top:4px}
+  .food .rcard.feat .rname{font-size:26px}
+  .food .statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border-top:1px solid var(--bord);border-bottom:1px solid var(--bord);padding:11px 0}
+  .food .stat{display:flex;flex-direction:column;gap:2px}
+  .food .statv{font-family:var(--mono);font-size:14px;font-weight:500;color:var(--txt)}
+  .food .statv.gold{color:var(--gold)} .food .statv.warn{color:var(--warn)}
+  .food .statl{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint)}
+  .food .rbadgerow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .food .rver{font-family:var(--mono);font-size:9px;color:var(--gold);letter-spacing:.5px}
+  .food .rtags{display:flex;flex-wrap:wrap;gap:4px}
+  .food .rtag{font-family:var(--mono);font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);border:1px solid var(--bord);border-radius:2px;padding:2px 6px}
+  .food .portrow{border-top:1px solid var(--bord);padding-top:9px;margin-top:2px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+  .food .portrow .pn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .food .portrow .pv{color:var(--gold);white-space:nowrap;flex-shrink:0}
+  .food .addwrap{margin-top:auto;border-top:1px solid var(--bord)}
+  .food .radd{width:100%;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:1.6px;text-transform:uppercase;
+   padding:11px 0;cursor:pointer;text-align:center;color:var(--dim);background:transparent;border:none}
+  .food .radd:hover{background:var(--gold-wash);color:var(--gold)}
+  .food .radd.on{color:var(--done);background:rgba(122,155,122,.12)}
+  .food .addbox{padding:11px 14px;display:flex;flex-direction:column;gap:8px}
+  .food .addstep{display:flex;align-items:center;justify-content:space-between}
+  .food .addlab{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .food .addbtns{display:flex;gap:8px}
+  .food .addbtns .abtn{flex:1;font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+   padding:7px 0;border-radius:2px;cursor:pointer;text-align:center;border:1px solid var(--bord);background:transparent;color:var(--dim)}
+  .food .addbtns .abtn:hover{border-color:var(--gold-dim);color:var(--gold)}
+  .food .addbtns .abtn.prim{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+  .food .step{display:flex;align-items:center;gap:6px}
+  .food .stepbtn{width:26px;height:26px;border-radius:2px;border:1px solid var(--bord);background:transparent;color:var(--gold);
+   display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;user-select:none}
+  .food .stepbtn:hover{border-color:var(--gold-dim)}
+  .food .stepval{font-family:var(--mono);font-size:13px;min-width:34px;text-align:center;color:var(--gold)}
+  .food .side{position:sticky;top:12px;display:grid;gap:16px;min-width:0}
+  @container (max-width:820px){.food .side{position:static}}
+  .food .panel{background:var(--card);border:1px solid var(--bord);border-radius:4px;overflow:hidden}
+  .food .phead{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--bord);padding:12px 15px}
+  .food .ptitle{font-family:var(--serif);font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold)}
+  .food .pcount{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--faint)}
+  .food .pcount.succ{color:var(--done)}
+  .food .pbody{padding:14px 15px}
+  .food .psub{font-family:var(--mono);font-size:10.5px;letter-spacing:.5px;color:var(--faint);margin-bottom:10px}
+  .food .planrow{padding:9px 0;border-bottom:1px solid var(--bord)}
+  .food .planrow:last-child{border-bottom:none}
+  .food .prtop{display:flex;align-items:flex-start;gap:8px}
+  .food .prname{flex:1;min-width:0;font-family:var(--serif);font-size:14px;color:var(--txt);cursor:pointer}
+  .food .prname:hover{color:var(--gold)}
+  .food .prx{font-family:var(--mono);font-size:11px;color:var(--faint);cursor:pointer;padding:0 2px}
+  .food .prx:hover{color:var(--warn)}
+  .food .prmeta{font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:var(--dim);margin-top:3px}
+  .food .prqty{font-family:var(--mono);font-size:10px;color:var(--gold);margin-top:3px}
+  .food .compline,.food .batchline{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;letter-spacing:1.2px;text-transform:uppercase;margin-top:10px}
+  .food .compline .complab,.food .batchline .bl{color:var(--faint)}
+  .food .compok{color:var(--done)} .food .compwarn{color:var(--warn)}
+  .food .mealline{margin-top:10px;padding:9px 11px;background:var(--gold-wash);border-left:2px solid var(--gold);font-size:12px;color:var(--dim)}
+  .food .mealline b{color:var(--txt);font-weight:600;font-family:var(--serif)}
+  .food .mealfit{font-family:var(--mono);font-size:11px;margin-top:4px}
+  .food .fit-ok{color:var(--done)} .food .fit-over,.food .fit-warn{color:var(--warn)}
+  .food .vhead{display:flex;align-items:baseline;justify-content:space-between;font-family:var(--mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);background:var(--card2);padding:6px 15px;margin:0}
+  .food .vhead .vn{color:var(--faint)}
+  .food .li{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12.5px;color:var(--dim);padding:7px 15px;border-bottom:1px solid var(--bord)}
+  .food .liname{flex:1;min-width:8em;overflow-wrap:anywhere;cursor:pointer}
+  .food .liname:hover{color:var(--gold)}
+  .food .vchip{font-family:var(--mono);font-size:9px;letter-spacing:.5px;color:var(--cue);border:1px solid var(--bord);border-radius:2px;padding:2px 5px;cursor:pointer;white-space:nowrap}
+  .food .vchip:hover{color:var(--gold);border-color:var(--gold-dim)}
+  .food .liqty{font-family:var(--mono);font-size:11px;color:var(--faint);white-space:nowrap;text-align:right;margin-left:auto}
+  .food .lix{color:var(--faint);cursor:pointer;font-size:11px;flex-shrink:0}
+  .food .lix:hover{color:var(--warn)}
+  .food .liskip .liname{text-decoration:line-through;color:var(--faint);cursor:default}
+  .food .lihome .liname{text-decoration:line-through;color:var(--faint)}
+  .food .lihome .note{font-family:var(--mono);font-size:9.5px;letter-spacing:.5px;color:var(--cue);min-width:10em}
+  .food .lihome .note.low{color:var(--warn)}
+  .food .totline{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--txt);padding:10px 15px;border-top:1px solid var(--gold-dim)}
+  .food .totline .succ{color:var(--done)}
+  .food .btnrow{display:flex;gap:8px;padding:12px 15px;border-top:1px solid var(--bord);flex-wrap:wrap}
+  .food .abtn{flex:1;font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+   padding:8px 0;border-radius:2px;cursor:pointer;color:var(--dim);background:transparent;border:1px solid var(--bord);text-align:center}
+  .food .abtn:hover{border-color:var(--gold-dim);color:var(--gold)}
+  .food .abtn.commit{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+  .food .abtn.commit:hover{color:var(--bg)}
+  .food .abtn.flash{color:var(--bg);background:var(--done);border-color:var(--done)}
+  .food .empty{font-size:12.5px;color:var(--faint);padding:8px 0}
+  .food .backdrop{display:none;position:fixed;inset:0;z-index:60;background:rgba(6,4,8,.8);backdrop-filter:blur(3px);
+   align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 14px}
+  .food .backdrop.on{display:flex}
+  .food .modal{width:100%;max-width:640px;background:var(--card);border:1px solid var(--bord);border-radius:4px;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .food .mhdr{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;border-bottom:1px solid var(--bord);padding:22px}
+  .food .mkick{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;letter-spacing:2px;text-transform:uppercase}
+  .food .mkick .mrole{color:var(--crimson)} .food .mkick .mcuis,.food .mkick .dot{color:var(--faint)}
+  .food .mname{font-family:var(--serif);font-size:25px;font-weight:700;line-height:1.2;margin-top:10px}
+  .food .mmeta{margin-top:10px;font-family:var(--mono);font-size:11px}
+  .food .mmeta .mcost{color:var(--done)}
+  .food .mclose{border:1px solid var(--bord);background:transparent;color:var(--dim);border-radius:2px;padding:6px 10px;cursor:pointer;font-size:12px}
+  .food .mclose:hover{border-color:var(--gold-dim);color:var(--gold)}
+  .food .vertoggle{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--bord);padding:16px 22px}
+  .food .verchip{font-family:var(--mono);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;padding:6px 11px;border-radius:2px;cursor:pointer;color:var(--dim);border:1px solid var(--bord);background:transparent}
+  .food .verchip[data-on="1"]{color:var(--gold);background:var(--gold-wash);border-color:var(--gold)}
+  .food .verswap{width:100%;font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:2px}
+  .food .verswap .flag{color:var(--warn);margin-left:6px}
+  .food .statrow.mstat{border:none;border-bottom:1px solid var(--bord);padding:20px 22px;border-radius:0}
+  .food .statrow.mstat .statv{font-size:19px}
+  .food .mtarget{font-family:var(--mono);font-size:11px;color:var(--dim);padding:12px 22px;border-bottom:1px solid var(--bord)}
+  .food .msrv{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid var(--bord);padding:18px 22px}
+  .food .msrvlab{font-family:var(--mono);font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint)}
+  .food .msrvval{font-family:var(--serif);font-size:17px;color:var(--gold);margin-top:4px}
+  .food .msrvr{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+  .food .msection{font-family:var(--serif);font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold);padding:18px 22px 0}
+  .food .ingtbl{padding:8px 22px 6px}
+  .food .ingh,.food .ingr{display:grid;grid-template-columns:1fr 84px 84px 84px 66px 46px;gap:7px;align-items:center}
+  .food .ingh{font-family:var(--mono);font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint);padding:6px 0;border-bottom:1px solid var(--bord)}
+  .food .ingh .r,.food .ingr .r{text-align:right}
+  .food .ingr{padding:8px 0;border-bottom:1px solid var(--bord);font-size:13.5px;color:var(--txt)}
+  .food .ingr .r{font-family:var(--mono);font-size:11.5px}
+  .food .ingr .dim{color:var(--dim)} .food .ingr .gold{color:var(--gold)} .food .ingr .succ{color:var(--done)}
+  .food .ingr .ovr{color:var(--gold)}
+  .food .qtycell{display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+  .food .ingqty{flex:1;min-width:0;font-family:var(--mono);font-size:11.5px;text-align:right;
+    color:var(--txt);background:var(--card2);border:1px solid var(--bord);border-radius:2px;padding:3px 5px}
+  .food .ingqty.none{background:transparent;border-style:dashed;color:var(--faint);text-align:right}
+  .food .ingqty:hover{border-color:var(--gold-dim)}
+  .food .ingqty:focus{outline:none;border-color:var(--gold);color:var(--txt);background:var(--card)}
+  .food .ingqty.on{color:var(--gold);border-color:var(--gold-dim);background:var(--card)}
+  .food .ingqty.bad{border-color:var(--warn);color:var(--warn)}
+  .food .qtyerr{flex-basis:100%;text-align:right;font-family:var(--mono);font-size:9px;letter-spacing:.3px;color:var(--warn);white-space:nowrap}
+  .food .qtyunit{width:26px;flex-shrink:0;font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap}
+  .food .ingtot{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);padding:12px 0 4px;margin-top:4px;border-top:1px solid var(--bord)}
+  .food .ingtot .succ{color:var(--done)}
+  .food .msteps{padding:6px 22px 20px;display:grid;gap:12px}
+  .food .mstep{display:flex;gap:12px}
+  .food .mstep .mnum{font-family:var(--mono);font-size:10px;color:var(--gold);background:var(--gold-wash);border:1px solid var(--gold-dim);border-radius:2px;padding:2px 6px;height:fit-content}
+  .food .mstep .mtext{font-size:13.5px;line-height:1.55;color:var(--txt)}
+  .food .mfoot{position:sticky;bottom:0;border-top:1px solid var(--bord);background:var(--card);padding:16px 22px}
+  .food .mfootbtn{width:100%;font-family:var(--mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;
+   padding:13px 0;border-radius:2px;cursor:pointer;background:var(--gold);color:var(--bg);border:none}
+  .food .mfootbtn:hover{background:#d8b878}
+  .food .mfootbtn.on{background:rgba(122,155,122,.2);color:var(--done)}
+
+  /* Food · phone adaptations (new — the desktop grid is unusable at 375px).
+     Ingredient rows become stacked blocks: name on its own line, the three
+     editable amount boxes in a row beneath, batch/price as a footer line. */
+  @media (max-width:640px){
+    .food .carousel{padding:0}
+    .food .carbtn{display:none}          /* swipe replaces the arrows on touch */
+    .food .grid{grid-template-columns:1fr}
+    .food .backdrop{padding:0}
+    .food .modal{max-width:none;border-radius:0;min-height:100%}
+    .food .mhdr,.food .vertoggle,.food .statrow.mstat,.food .mtarget,.food .msrv{padding-left:16px;padding-right:16px}
+    .food .msection{padding:16px 16px 0}
+    .food .ingtbl{padding:8px 16px 6px}
+    .food .msteps{padding:6px 16px 20px}
+    .food .mfoot{padding:14px 16px;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+    .food .ingh{display:none}            /* column headers make no sense stacked */
+    /* one ingredient = a block: name on its own line, the three amount boxes
+       side by side under it, batch + price as a small footer line */
+    .food .ingr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:12px 0}
+    .food .ingr > span:first-child{flex:0 0 100%;font-family:var(--serif);font-size:15px;line-height:1.3}
+    .food .qtycell{flex:0 0 auto;justify-content:flex-start;gap:3px}
+    .food .ingqty{flex:0 0 auto;width:68px;font-size:14px;padding:6px 7px;text-align:right}
+    .food .ingr .r{text-align:left}
+    .food .ingr .r.dim,.food .ingr .r.succ{flex:0 0 auto;font-size:11px;color:var(--faint)}
+    .food .ingr .r.succ{margin-left:auto;color:var(--done)}
+    .food .statrow{grid-template-columns:repeat(4,1fr);gap:4px}
+    .food .statv{font-size:13px}
+  }
 </style>
 </head>
 <body>
@@ -189,7 +431,7 @@
     </div>
   </section>
   <section id="view-workout" class="view"></section>
-  <section id="view-food" class="view"><div class="card"><h2>Food</h2><p class="placeholder">M2 — recipes, meal log, macro badge.</p></div></section>
+  <section id="view-food" class="view"></section>
   <section id="view-board" class="view"><div class="card"><h2>Board</h2><p class="placeholder">M3 — 6 lanes, 4 domains.</p></div></section>
   <section id="view-tracking" class="view"><div class="card"><h2>Tracking</h2><p class="placeholder">M4 — habit ticks + capture.</p></div></section>
   <section id="view-brief" class="view"><div class="card"><h2>Brief</h2><p class="placeholder">M4 — latest brief + staleness label.</p></div></section>
@@ -237,6 +479,7 @@ async function readFile(path) {
   const body = await res.json();
   const raw = b64decode(body.content);
   let data; try { data = JSON.parse(raw); } catch { data = raw; }
+  shaMap.set(path, body.sha);   // priming the sha here is what lets writes skip a read
   return { data, sha: body.sha, raw };
 }
 /* list a directory -> [{name, path, sha}] ; [] if 404 */
@@ -308,10 +551,40 @@ async function imageURL(path) {
   return url;
 }
 
+/* ---- Obsidian DOM shim -------------------------------------------------
+   The vault widgets are written against Obsidian's createDiv/createEl/empty/
+   setText helpers. Implementing them here lets the ports stay near-verbatim
+   against Workout.md / Food.md, so upstream changes remain easy to re-apply. */
+(() => {
+  const P = Element.prototype;
+  function build(tag, o) {
+    const n = document.createElement(tag);
+    if (o) {
+      if (o.cls) n.className = o.cls;
+      if (o.text != null) n.textContent = o.text;
+      if (o.attr) for (const k in o.attr) n.setAttribute(k, o.attr[k]);
+      if (o.href) n.href = o.href;
+      if (o.type) n.type = o.type;
+      if (o.value != null) n.value = o.value;
+    }
+    return n;
+  }
+  P.createEl  = function (tag, o) { const n = build(tag, o); this.appendChild(n); return n; };
+  P.createDiv = function (o) { return this.createEl("div", o); };
+  P.createSpan= function (o) { return this.createEl("span", o); };
+  P.empty     = function () { while (this.firstChild) this.removeChild(this.firstChild); };
+  P.setText   = function (t) { this.textContent = t; };
+  P.addClass  = function (...c) { this.classList.add(...c.filter(Boolean)); };
+  P.removeClass = function (...c) { this.classList.remove(...c.filter(Boolean)); };
+  P.hasClass  = function (c) { return this.classList.contains(c); };
+  P.toggleClass = function (c, on) { this.classList.toggle(c, on); };
+  window.createDiv = (o) => build("div", o);   // Obsidian's detached global
+  window.createEl  = (tag, o) => build(tag, o);
+})();
+
 /* ============================== app shell ============================== */
-/* Spaces exposed in this build — others exist in code but stay dark until
-   their milestone ships (user: "just keep it to workout for now"). */
-const SPACES = ["workout"];
+/* Spaces exposed in this build — others stay dark until their milestone ships. */
+const SPACES = ["workout", "food"];
 const $ = id => document.getElementById(id);
 function el(parent, tag, cls, text) {
   const n = document.createElement(tag);
@@ -331,6 +604,7 @@ function show(space) {
     b.classList.toggle("active", b.dataset.space === space));
   localStorage.setItem("secundus.space", space);
   if (space === "workout") Workout.mount();
+  if (space === "food") Food.mount();
 }
 function boot() {
   const nav = $("nav");
@@ -875,6 +1149,1230 @@ const Workout = (() => {
 
     host = el(root, "div");
     renderDay();
+  }
+
+  return { mount };
+})();
+
+/* ====================================================================
+   FOOD — port of orgs/health/Food.md (Renovatio prep-batch composer).
+   Same data files, same engine. Obsidian vault I/O swapped for the repo
+   rails; every write is a commit tagged [site].
+   ==================================================================== */
+const Food = (() => {
+  let mounted = false;
+
+  const DATA_PATH   = "orgs/health/data/food-proto.json";
+  const EXPORT_PATH = "orgs/health/data/shopping-list.json";
+  const SPEND_PATH  = "orgs/health/data/grocery-spend.json";
+  const INV_PATH    = "orgs/health/data/inventory.json";
+
+  async function readJSON(path, fallback) {
+    try {
+      const f = await readFile(path);
+      return f ? f.data : fallback;
+    } catch (e) { console.warn("[food] read failed", path, e); return fallback; }
+  }
+  const writeJSON = (path, obj, msg) => writeRaw(path, JSON.stringify(obj, null, 2) + "\n", msg);
+
+  async function mount() {
+    if (mounted) return;
+    const container = $("view-food");
+    container.empty();
+    const boot = container.createDiv({ cls: "food" });
+    const loading = boot.createDiv({ text: "Loading kitchen from repo…" });
+    loading.style.cssText = "font-family:var(--mono);font-size:12px;color:var(--faint);padding:14px 0";
+
+    const data    = await readJSON(DATA_PATH, null);
+    const mealsDb = await readJSON("orgs/health/data/meals.json", null);
+    const ingDb   = await readJSON("orgs/health/data/ingredients.json", null);
+    const invDb   = await readJSON(INV_PATH, null);
+    const packDb  = await readJSON("orgs/health/data/packs.json", null);
+
+    container.empty();
+    const root = container;
+    mounted = true;
+    run(root, { data, mealsDb, ingDb, invDb, packDb });
+  }
+
+  /* ---- the ported widget (body kept as close to Food.md as possible) ---- */
+  function run(root, db) {
+    const { data, mealsDb, ingDb, invDb, packDb } = db;
+
+    function todayISO() {
+      const d = new Date(), p = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    }
+    async function writeInventory() {
+      invDb.last_updated = todayISO();
+      await writeJSON(INV_PATH, invDb, `food: inventory update ${todayISO()} [site]`);
+    }
+
+    let RECIPES, INVENTORY, LOWSTOCK;
+    if (mealsDb && Array.isArray(mealsDb.meals) && mealsDb.meals.length && ingDb && Array.isArray(ingDb.ingredients)) {
+      const ingById = new Map(ingDb.ingredients.map(i => [i.id, i]));
+      const vendorOf = (src) => {
+        const t = String(src || "").split(/[(/;,]/)[0].trim();
+        if (/^(TJ|Trader)/i.test(t)) return "Trader Joe's";
+        if (/^Weee/i.test(t)) return "Weee";
+        if (/^Amazon/i.test(t)) return "Amazon";
+        if (/^Costco/i.test(t)) return "Costco";
+        return "Other";
+      };
+      const roleOf = (m) => m.role === "veg_side" ? "side" : m.role === "carb_side" ? "base" : "main";
+      RECIPES = mealsDb.meals.map(m => {
+        const hasAmounts = (m.ingredients || []).some(e => e.amount);
+        return {
+          id: m.id, name: m.name, subtitle: m.subtitle || null, role: roleOf(m), slot: m.meal_slot,
+          prep_min: m.prep_min || null,
+          base_servings: hasAmounts ? (m.batch_servings || 1) : 1,
+          maxBatch: m.max_batch_servings || null,
+          derived_totals: m.derived_totals || null, tags: m.tags || [],
+          macro_target: m.macro_target || null, versions: m.versions || [],
+          ingredients: m.ingredients.map(e => {
+            const i = ingById.get(e.ingredient_id) || {};
+            return {
+              name: i.name || e.ingredient_id, qty: e.qty, unit: i.unit || "", cat: i.storage || "",
+              amount: e.amount || null,
+              basis: i.basis || null, unitSize: i.unit_size || 0, piece: i.piece || null,
+              yieldRatio: i.yield_ratio || null, buyBasis: i.buy_basis || null,
+              vendor: vendorOf(i.source), link: i.link, asin: i.asin, alts: i.alts,
+              per: { price: i.unit_price || 0, cal: i.calories || 0, p: i.protein_g || 0, c: i.carbs_g || 0, f: i.fat_g || 0 },
+              price: (i.unit_price || 0) * e.qty,
+              cal: (i.calories || 0) * e.qty, p: (i.protein_g || 0) * e.qty,
+              c: (i.carbs_g || 0) * e.qty, f: (i.fat_g || 0) * e.qty
+            };
+          }),
+          steps: m.steps || (m.method ? [m.method] : [])
+        };
+      });
+      INVENTORY = {};
+      LOWSTOCK = new Set();
+      ((invDb && invDb.stock) || []).forEach(s => {
+        if (s.qty_on_hand > 0) {
+          const i = ingById.get(s.ingredient_id);
+          if (i) {
+            INVENTORY[i.name] = s.note || `${s.qty_on_hand} ${s.unit} on hand`;
+            if (s.min_qty != null && s.qty_on_hand <= s.min_qty) LOWSTOCK.add(i.name);
+          }
+        }
+      });
+    } else {
+      root.createDiv({ text: "⚠️ No data: need orgs/health/data/meals.json + ingredients.json." });
+      return;
+    }
+
+    const ID_BY_NAME = new Map((ingDb.ingredients || []).map(g => [g.name, g.id]));
+    const ING_BY_ID  = new Map((ingDb.ingredients || []).map(g => [g.id, g]));
+    const PACK_BY_ID = new Map(((packDb && packDb.packs) || []).map(p => [p.ingredient_id, p]));
+
+    function needIn(item, want) {
+      const a = item.amount;
+      if (a) {
+        if (item.noAmtLines) return null;
+        if (want === "count") return a.ct != null ? a.ct : null;
+        return a[want] != null ? a[want] : null;
+      }
+      return want === "count" && item.qty > 0 ? item.qty : null;
+    }
+    function packInfo(item) {
+      const id = ID_BY_NAME.get(item.name);
+      if (!id) return null;
+      const row = PACK_BY_ID.get(id);
+      if (row) {
+        if (row.pack_class === "staple" || row.pack_qty == null) return null;
+        if (row.vendor && item.vendor && row.vendor !== item.vendor) {
+          const src = String((ING_BY_ID.get(id) || {}).source || "");
+          const alias = row.vendor === "Trader Joe's" ? /trader|tj\b/i
+                      : new RegExp(row.vendor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+          if (!alias.test(src)) return null;
+        }
+        const bridged = row.recipe_unit && row.pack_in_recipe_units > 0;
+        const wantUnit = bridged ? row.recipe_unit : (row.pack_basis === "count" ? "count" : row.pack_unit);
+        const perPack = bridged ? row.pack_in_recipe_units : row.pack_qty;
+        const need = needIn(item, wantUnit);
+        if (!(need > 0)) return null;
+        const packs = Math.max(1, Math.ceil(need / perPack));
+        const unit = row.pack_unit === "count" ? "" : " " + row.pack_unit;
+        return {
+          packs, need, basis: row.pack_basis, src: bridged ? "packs.json (bridged)" : "packs.json",
+          label: `${row.pack_qty}${unit}`,
+          needText: item.amount ? fmtAmount(item.amount, 1) : unitPhrase(item.qty, item.unit),
+          cost: row.pack_price_usd != null ? packs * row.pack_price_usd : null,
+          over: (packs * perPack - need) / (packs * perPack),
+          provenance: row.provenance, product: row.product
+        };
+      }
+      const g2 = ING_BY_ID.get(id);
+      const spp = g2 && Number(g2.servings_per_pack);
+      const need = needIn(item, "count");
+      if (!spp || !(need > 0)) return null;
+      const packs = Math.max(1, Math.ceil(need / spp));
+      return {
+        packs, need, basis: "count", src: "servings_per_pack",
+        label: g2.pack_size || `${spp} × ${g2.unit || "unit"}`,
+        needText: item.amount ? fmtAmount(item.amount, 1) : unitPhrase(item.qty, item.unit),
+        cost: g2.pack_price != null ? packs * g2.pack_price : null,
+        over: (packs * spp - need) / (packs * spp),
+        provenance: g2.price_confirmed ? "confirmed" : "estimate",
+        product: g2.sku || null
+      };
+    }
+    const lineCost = (i) => (i.pack && i.pack.cost != null) ? i.pack.cost : i.price;
+
+    let spendLog = Array.isArray(db.spendLog) ? db.spendLog : [];
+    readJSON(SPEND_PATH, []).then(s => { if (Array.isArray(s)) { spendLog = s; renderSpend(); } });
+
+    function weekStartISO(d) {
+      const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+      const p = n => String(n).padStart(2, "0");
+      return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+    }
+
+    const TARGETS = (data && data.targets) || { cal_day: 1600, protein_day: 150, meals_per_day: 3 };
+    const MEAL_TARGET = { cal: Math.round(TARGETS.cal_day / TARGETS.meals_per_day), p: Math.round(TARGETS.protein_day / TARGETS.meals_per_day) };
+    const byId = new Map(RECIPES.map(r => [r.id, r]));
+    const maxSrv = r => r.maxBatch || 12;
+
+    const filt = { q: "", meal: null, cuisine: new Set(), type: new Set(), maxCost: null, minProtein: null, maxCal: null, inPlan: false, pantry: false };
+    const plan = new Map();
+    const vendorPick = new Map();
+    const skipSet = new Set();
+    const PLAN_KEY = "secundus-food-plan-v1";
+    function savePlan() {
+      try { localStorage.setItem(PLAN_KEY, JSON.stringify({
+        plan: [...plan].map(([id, e]) => [id, { servings: e.servings, ver: e.ver || null, qtys: [...(e.qtys || new Map())] }]),
+        skips: [...skipSet], vendors: [...vendorPick]
+      })); } catch (e) {}
+    }
+    function loadPlan() {
+      try {
+        const raw = localStorage.getItem(PLAN_KEY);
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        const entries = Array.isArray(d) ? d : (d.plan || []);
+        entries.forEach(([id, e]) => {
+          if (!byId.has(id)) return;
+          const r = byId.get(id);
+          const ver = e.ver && (r.versions || []).some(v => v.id === e.ver) ? e.ver : null;
+          plan.set(id, { servings: e.servings || r.base_servings, ver, qtys: new Map(e.qtys || []) });
+        });
+        if (!Array.isArray(d)) {
+          (d.skips || []).forEach(k => skipSet.add(k));
+          (d.vendors || []).forEach(([k, v]) => vendorPick.set(k, v));
+        }
+      } catch (e) {}
+    }
+    loadPlan();
+    let modalId = null, modalVer = null;
+
+    const VENDOR_SEARCH = {
+      "Weee":         q => `https://www.sayweee.com/en/search?keyword=${encodeURIComponent(q)}`,
+      "Costco":       q => `https://www.costco.com/CatalogSearch?keyword=${encodeURIComponent(q)}`,
+      "Trader Joe's": q => `https://www.traderjoes.com/home/search?q=${encodeURIComponent(q)}`,
+      "Amazon":       q => `https://www.amazon.com/s?k=${encodeURIComponent(q)}`
+    };
+    const itemUrl = (item) => {
+      const opt = item.options.get(item.vendor) || {};
+      if (opt.link) return opt.link;
+      if (opt.asin) return `https://www.amazon.com/dp/${opt.asin}`;
+      const s = VENDOR_SEARCH[item.vendor];
+      return s ? s(item.name) : null;
+    };
+
+    const QTY_MAX = 999;
+    const OZ = 28.35, FLOZ = 29.574, TBSP = 14.79, TSP = 4.93, CUP = 236.6;
+    function unitViews(ing, amt) {
+      if (!ing.basis || ing.basis === "none" || !ing.unitSize) return null;
+      const vol = ing.basis === "volume";
+      const views = {
+        metric:   { amt, per: 1, abbr: vol ? "ml" : "g" },
+        imperial: { amt: amt / (vol ? FLOZ : OZ), per: vol ? FLOZ : OZ, abbr: vol ? "floz" : "oz" },
+        unit:     null
+      };
+      if (ing.piece && ing.piece.size) {
+        views.unit = { amt: amt / ing.piece.size, per: ing.piece.size, abbr: ing.piece.abbr };
+      } else if (vol) {
+        const [per, abbr] = amt >= CUP ? [CUP, "cup"] : amt >= TBSP ? [TBSP, "tbsp"] : [TSP, "tsp"];
+        views.unit = { amt: amt / per, per, abbr };
+      }
+      return views;
+    }
+    function fmtAmt(v) {
+      if (!isFinite(v)) return "";
+      const a = Math.abs(v);
+      return String(Number(v.toFixed(a >= 100 ? 0 : a >= 10 ? 1 : 2)));
+    }
+    function parseQtyInput(raw, max) {
+      const s = String(raw ?? "").trim();
+      if (s === "") return { reset: true };
+      const v = Number(s);
+      if (!Number.isFinite(v)) return { error: "not a number" };
+      if (v < 0) return { error: "cannot be negative" };
+      if (v > max) return { error: `over ${max} — check the unit` };
+      return { qty: v };
+    }
+
+    function planEntry(id) {
+      if (!plan.has(id)) plan.set(id, { servings: byId.get(id).base_servings, qtys: new Map() });
+      const e = plan.get(id);
+      if (!e.qtys) e.qtys = new Map();
+      return e;
+    }
+    function withQty(ing, q) {
+      const amount = (ing.amount && ing.qty > 0) ? scaleAmount(ing.amount, q / ing.qty) : null;
+      return { ...ing, qty: q, amount, price: ing.per.price * q, cal: ing.per.cal * q, p: ing.per.p * q, c: ing.per.c * q, f: ing.per.f * q };
+    }
+    function scaleAmount(a, k) {
+      const out = {};
+      if (a.g != null) out.g = a.g * k;
+      if (a.ml != null) out.ml = a.ml * k;
+      if (a.ct != null) { out.ct = a.ct * k; if (a.u) out.u = a.u; }
+      return out;
+    }
+    const versionOf = (r, verId) => verId ? (r.versions || []).find(v => v.id === verId) : null;
+    function effectiveIngredients(r, qtys) {
+      return r.ingredients.map(ing => {
+        const q = qtys ? qtys.get(ing.name) : undefined;
+        return (q === undefined || q === ing.qty || !ing.per) ? ing : withQty(ing, q);
+      });
+    }
+    function perServing(r, qtys) {
+      const ings = effectiveIngredients(r, qtys);
+      const t = { cal: 0, p: 0, c: 0, f: 0, cost: 0 };
+      for (const i of ings) { t.cal += i.cal || 0; t.p += i.p || 0; t.c += i.c || 0; t.f += i.f || 0; t.cost += i.price || 0; }
+      const n = r.base_servings;
+      return { cal: t.cal / n, p: t.p / n, c: t.c / n, f: t.f / n, cost: t.cost / n };
+    }
+    function targetFit(r, ps) {
+      const t = r.macro_target; if (!t) return null;
+      if (t.kind === "treat") return { cls: "fit-treat", text: "treat" };
+      const calHi = t.calories && t.calories[1];
+      if (!t.protein_g) {
+        if (!calHi) return { cls: "fit-ok", text: `${Math.round(ps.cal)} cal` };
+        return ps.cal <= calHi + 1 ? { cls: "fit-ok", text: "light" } : { cls: "fit-warn", text: `⚠ ${Math.round(ps.cal)} cal` };
+      }
+      const pLo = t.protein_g[0];
+      const okP = ps.p >= pLo - 0.5, okC = !calHi || ps.cal <= calHi + 1;
+      if (okP && okC) return { cls: "fit-ok", text: "✓ on target" };
+      if (!okP) return { cls: "fit-warn", text: `⚠ ${Math.round(ps.p)}/${pLo}g protein` };
+      return { cls: "fit-warn", text: `⚠ ${Math.round(ps.cal)} cal` };
+    }
+    function plateMacros(r, qtys, verId) {
+      const ps = perServing(r, qtys);
+      const recipeQty = new Map(r.ingredients.map(i => [i.name, i.qty]));
+      const hasActiveQty = qtys && [...qtys].some(([n, q]) => q !== undefined && q !== recipeQty.get(n));
+      const ver = versionOf(r, verId);
+      const dt = (ver && ver.derived_totals) || r.derived_totals;
+      if (dt && !hasActiveQty) return { cal: dt.calories, p: dt.protein_g, c: dt.carbs_g, f: dt.fat_g, cost: ps.cost };
+      return ps;
+    }
+    const money = v => "$" + v.toFixed(2);
+    const g = v => Math.round(v) + "g";
+    function niceNum(n) {
+      const whole = Math.floor(n + 1e-6), frac = n - whole;
+      const F = [[0,""],[.25,"¼"],[.333,"⅓"],[.5,"½"],[.667,"⅔"],[.75,"¾"],[1,""]];
+      let best = F[0], bd = 1;
+      for (const f of F) { const d = Math.abs(frac - f[0]); if (d < bd) { bd = d; best = f; } }
+      if (bd > 0.04) return (+n.toFixed(2)).toString();
+      const w = best[0] === 1 ? whole + 1 : whole;
+      return best[1] ? `${w > 0 ? w : ""}${best[1]}` : String(w);
+    }
+    function fmtAmount(a, scale) {
+      if (a.g != null) {
+        const gg = a.g * scale;
+        const metric = gg < 1000 ? `${Math.round(gg)} g` : `${(+(gg / 1000).toFixed(2))} kg`;
+        const oz = gg / 28.3495;
+        const imp = oz < 16 ? `${niceNum(oz)} oz` : `${niceNum(oz / 16)} lb`;
+        return `${metric} / ${imp}`;
+      }
+      if (a.ml != null) {
+        const ml = a.ml * scale;
+        const metric = ml < 1000 ? `${Math.round(ml)} ml` : `${(+(ml / 1000).toFixed(2))} L`;
+        const cup = ml / 236.588;
+        let imp;
+        if (cup >= 0.25) imp = `${niceNum(cup)} cup`;
+        else { const tbsp = ml / 14.7868; imp = tbsp >= 1 ? `${niceNum(tbsp)} tbsp` : `${niceNum(ml / 4.92892)} tsp`; }
+        return `${metric} / ${imp}`;
+      }
+      return `${niceNum((a.ct || 0) * scale)}${a.u ? " " + a.u : ""}`;
+    }
+    function isEggFree(r) { return !(r.ingredients || []).some(i => /\begg(s)?\b/i.test(i.name)); }
+    function unitPhrase(n, unit) {
+      if (!unit) return niceNum(n);
+      const m = unit.match(/^1\s+(.+)/);
+      if (m) return `${niceNum(n)} ${m[1]}`;
+      if (Math.abs(n - 1) < 1e-6) return unit;
+      return `${niceNum(n)} × ${unit}`;
+    }
+    function plateGrams(r, qtys) {
+      const ings = effectiveIngredients(r, qtys);
+      let gg = 0, counted = 0;
+      for (const i of ings) {
+        if (!i.unitSize || !i.basis || i.basis === "none") continue;
+        gg += i.qty * i.unitSize; counted++;
+      }
+      return { g: gg / r.base_servings, counted, total: ings.length };
+    }
+    function plateGramsText(r, qtys) {
+      const w = plateGrams(r, qtys);
+      if (!w.counted) return "not weighed";
+      const v = `${Math.round(w.g)} g`;
+      return w.counted === w.total ? v : `~${v} (${w.counted}/${w.total} lines)`;
+    }
+
+    const CUISINES = new Set(["american","chinese","filipino","french","hungarian","indian","indonesian","italian","japanese","korean","middle-eastern","sichuan","spanish","taiwanese","thai","vietnamese"]);
+    const MEAL_OF = { breakfast: "Breakfast", lunch_dinner: "Full Meal", side: "Side Dish", dessert: "Dessert", snack: "Side Dish" };
+    const MEAL_ORDER = ["Breakfast", "Full Meal", "Side Dish", "Dessert"];
+    const TYPE_ORDER = ["Beef", "Pork", "Chicken", "Meat", "Seafood", "Vegetarian", "Vegan", "Egg"];
+    const RE_BEEF = /beef|steak|sirloin|ribeye|brisket|chuck|bulgogi|short.?rib|gyudon/i;
+    const RE_PORK = /pork|belly|bacon|pancetta|sausage|lap cheong|lardon|\bham\b|char siu|luncheon|spam/i;
+    const RE_CHICK = /chicken/i;
+    const RE_STOCK = /stock|broth|bouillon|dashi/i;
+    const cuisineTags = (r) => (r.tags || []).filter(t => CUISINES.has(t));
+    const mealLabel = (r) => MEAL_OF[r.slot] || "Full Meal";
+    function proteinTypes(r) {
+      const explicit = (r.tags || []).filter(t => /^(beef|pork|chicken)$/i.test(t)).map(t => t[0].toUpperCase() + t.slice(1).toLowerCase());
+      if (explicit.length) return [...new Set(explicit)];
+      const s = new Set();
+      for (const i of (r.ingredients || [])) {
+        const nm = i.name || "";
+        if (RE_STOCK.test(nm)) continue;
+        if (RE_BEEF.test(nm)) s.add("Beef");
+        if (RE_PORK.test(nm)) s.add("Pork");
+        if (RE_CHICK.test(nm)) s.add("Chicken");
+      }
+      return [...s];
+    }
+    function typeTags(r) {
+      const t = r.tags || [], out = new Set();
+      if (t.includes("vegan")) out.add("Vegan");
+      if (t.includes("vegetarian")) out.add("Vegetarian");
+      if (t.includes("seafood")) out.add("Seafood");
+      if (t.includes("meat")) { const p = proteinTypes(r); if (p.length) p.forEach(x => out.add(x)); else out.add("Meat"); }
+      if (!isEggFree(r)) out.add("Egg");
+      return TYPE_ORDER.filter(x => out.has(x));
+    }
+    function activeCount() {
+      return (filt.meal ? 1 : 0) + filt.cuisine.size + filt.type.size + (filt.q.trim() ? 1 : 0)
+        + (filt.maxCost != null ? 1 : 0) + (filt.minProtein != null ? 1 : 0) + (filt.maxCal != null ? 1 : 0)
+        + (filt.inPlan ? 1 : 0) + (filt.pantry ? 1 : 0);
+    }
+    function pantryFriendly(r) {
+      const lines = (r.ingredients || []).filter(i => i.qty > 0);
+      if (!lines.length) return false;
+      const home = lines.filter(i => INVENTORY[i.name] !== undefined).length;
+      return home / lines.length >= 0.5;
+    }
+    function filtered() {
+      const q = filt.q.trim().toLowerCase();
+      return RECIPES.filter(r => {
+        if (filt.meal && mealLabel(r) !== filt.meal) return false;
+        if (filt.cuisine.size && !cuisineTags(r).some(c => filt.cuisine.has(c))) return false;
+        if (filt.type.size && !typeTags(r).some(t => filt.type.has(t))) return false;
+        if (filt.inPlan && !plan.has(r.id)) return false;
+        if (filt.pantry && !pantryFriendly(r)) return false;
+        const e = plan.get(r.id);
+        const ps = plateMacros(r, e ? e.qtys : null, e ? e.ver : null);
+        if (filt.maxCost != null && ps.cost > filt.maxCost) return false;
+        if (filt.minProtein != null && ps.p < filt.minProtein) return false;
+        if (filt.maxCal != null && ps.cal > filt.maxCal) return false;
+        if (q) {
+          const hay = [r.name, r.subtitle || "", mealLabel(r), ...cuisineTags(r), ...typeTags(r), ...(r.ingredients || []).map(i => i.name)].join(" ").toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+    function featuredList(list) {
+      const mains = list.filter(r => r.role === "main");
+      const pool = mains.length ? mains : list;
+      const unplanned = pool.filter(r => !plan.has(r.id));
+      const pick = unplanned.length ? unplanned : pool;
+      const score = r => { const f = targetFit(r, plateMacros(r, null)); return f && f.cls === "fit-ok" ? 0 : 1; };
+      return [...pick].sort((a, b) => score(a) - score(b)).slice(0, 8);
+    }
+
+    /* ---- skeleton ---- */
+    const wrap = root.createDiv({ cls: "food" });
+    const hdr = wrap.createDiv({ cls: "hdr" });
+    const hl = hdr.createDiv();
+    hl.createDiv({ cls: "kick", text: "Roman Kitchen · Prep-Batch Composer" });
+    hl.createDiv({ cls: "brand serif", text: "Renovatio" });
+    const hrEl = hdr.createDiv({ cls: "hr" });
+    function tPill(label, val) { const p = hrEl.createDiv({ cls: "tpill" }); p.createSpan({ cls: "tl", text: label }); p.createSpan({ cls: "tv", text: String(val) }); }
+    tPill("cal / meal", MEAL_TARGET.cal);
+    tPill("protein / meal", MEAL_TARGET.p + "g");
+    tPill("meals / day", TARGETS.meals_per_day);
+
+    const filtersEl = wrap.createDiv({ cls: "filters" });
+    const layout = wrap.createDiv({ cls: "layout" });
+    const mainCol = layout.createDiv({ cls: "maincol" });
+    const carEl = mainCol.createDiv({ cls: "carousel" });
+    const libEl = mainCol.createDiv({ cls: "library" });
+    const sideEl = layout.createDiv({ cls: "side" });
+    const planPanel = sideEl.createDiv({ cls: "panel" });
+    const shopPanel = sideEl.createDiv({ cls: "panel" });
+    const spendPanel = sideEl.createDiv({ cls: "panel" });
+    const backdrop = wrap.createDiv({ cls: "backdrop" });
+    const modal = backdrop.createDiv({ cls: "modal" });
+    backdrop.onclick = (e) => { if (e.target === backdrop) { modalId = null; backdrop.removeClass("on"); } };
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && backdrop.hasClass("on")) { modalId = null; backdrop.removeClass("on"); } });
+
+    const ALL_CUISINES = [...new Set(RECIPES.flatMap(cuisineTags))].sort();
+    const ALL_MEALS = MEAL_ORDER.filter(m => RECIPES.some(r => mealLabel(r) === m));
+    const ALL_TYPES = TYPE_ORDER.filter(t => RECIPES.some(r => typeTags(r).includes(t)));
+
+    let filteredCache = [];
+    function renderContent() { filteredCache = filtered(); renderCarousel(); renderLibrary(); }
+    function renderAfterPlan() { renderContent(); renderPlan(); renderShop(); }
+
+    let resetChip = null, chipsEl = null;
+    function updateReset() {
+      if (!resetChip) return;
+      const n = activeCount();
+      if (n) { resetChip.style.display = ""; resetChip.setText(`reset · ${n}`); }
+      else resetChip.style.display = "none";
+    }
+    function numField(parent, label, key, step) {
+      const f = parent.createDiv({ cls: "numf" });
+      f.dataset.on = filt[key] != null ? "1" : "0";
+      f.createSpan({ cls: "nfl", text: label });
+      const inp = f.createEl("input", { cls: "nfi" });
+      inp.type = "number"; inp.min = "0"; inp.step = String(step);
+      inp.value = filt[key] ?? "";
+      inp.oninput = () => {
+        filt[key] = inp.value === "" ? null : Number(inp.value);
+        f.dataset.on = filt[key] != null ? "1" : "0";
+        renderContent(); updateReset();
+      };
+    }
+    function renderChips() {
+      chipsEl.empty();
+      const row = (label) => { const r = chipsEl.createDiv({ cls: "chiprow" }); r.createSpan({ cls: "flabel", text: label }); return r; };
+      const toggleSet = (set, v) => { set.has(v) ? set.delete(v) : set.add(v); renderChips(); renderContent(); updateReset(); };
+      const cr = row("cuisine");
+      ALL_CUISINES.forEach(c => { const e2 = cr.createDiv({ cls: "pill", text: c }); e2.dataset.on = filt.cuisine.has(c) ? "1" : "0"; e2.onclick = () => toggleSet(filt.cuisine, c); });
+      const mr = row("meal");
+      const any = mr.createDiv({ cls: "pill", text: "any" });
+      any.dataset.on = filt.meal ? "0" : "1";
+      any.onclick = () => { filt.meal = null; renderChips(); renderContent(); updateReset(); };
+      ALL_MEALS.forEach(m => { const e2 = mr.createDiv({ cls: "pill", text: m }); e2.dataset.on = filt.meal === m ? "1" : "0"; e2.onclick = () => { filt.meal = filt.meal === m ? null : m; renderChips(); renderContent(); updateReset(); }; });
+      const tr = row("type");
+      ALL_TYPES.forEach(t => { const e2 = tr.createDiv({ cls: "pill", text: t }); e2.dataset.on = filt.type.has(t) ? "1" : "0"; e2.onclick = () => toggleSet(filt.type, t); });
+      const qr = row("quick");
+      const mkTog = (label, key) => {
+        const e2 = qr.createDiv({ cls: "pill", text: label });
+        e2.dataset.on = filt[key] ? "1" : "0";
+        e2.onclick = () => { filt[key] = !filt[key]; renderChips(); renderContent(); updateReset(); };
+      };
+      mkTog("in plan", "inPlan");
+      mkTog("pantry-friendly", "pantry");
+    }
+    function buildFilters() {
+      filtersEl.empty();
+      const sr = filtersEl.createDiv({ cls: "srow" });
+      const sw = sr.createDiv({ cls: "searchwrap" });
+      const si = sw.createEl("input", { cls: "search" });
+      si.type = "text"; si.placeholder = "Search recipes, cuisines, ingredients…"; si.value = filt.q;
+      si.oninput = () => { filt.q = si.value; renderContent(); updateReset(); };
+      resetChip = sr.createDiv({ cls: "resetchip" });
+      resetChip.onclick = () => {
+        filt.meal = null; filt.cuisine.clear(); filt.type.clear(); filt.q = "";
+        filt.maxCost = filt.minProtein = filt.maxCal = null;
+        filt.inPlan = filt.pantry = false;
+        buildFilters(); renderContent();
+      };
+      chipsEl = filtersEl.createDiv({ cls: "chipwrap" });
+      const nr = filtersEl.createDiv({ cls: "numrow" });
+      nr.createSpan({ cls: "flabel", text: "macros" });
+      numField(nr, "max $", "maxCost", 0.5);
+      numField(nr, "min P g", "minProtein", 5);
+      numField(nr, "max kcal", "maxCal", 50);
+      renderChips();
+      updateReset();
+    }
+
+    function stat(parent, label, val, accent, danger) {
+      const c = parent.createDiv({ cls: "stat" });
+      c.createDiv({ cls: "statv" + (danger ? " warn" : accent ? " gold" : ""), text: String(val) });
+      c.createDiv({ cls: "statl", text: label });
+    }
+    function buildAddArea(container, r) {
+      container.empty();
+      if (plan.has(r.id)) {
+        const b = container.createEl("button", { cls: "radd on", text: "✓ In plan — remove" });
+        b.onclick = (e) => { e.stopPropagation(); plan.delete(r.id); renderAfterPlan(); };
+        return;
+      }
+      let prompting = false, srv = r.base_servings;
+      const stage = () => {
+        container.empty();
+        if (!prompting) {
+          const b = container.createEl("button", { cls: "radd", text: "+ Add to plan" });
+          b.onclick = (e) => { e.stopPropagation(); prompting = true; stage(); };
+          return;
+        }
+        const box = container.createDiv({ cls: "addbox" });
+        const row = box.createDiv({ cls: "addstep" });
+        row.createSpan({ cls: "addlab", text: "servings" });
+        const st = row.createDiv({ cls: "step" });
+        const mn = st.createDiv({ cls: "stepbtn", text: "−" });
+        const vv = st.createDiv({ cls: "stepval", text: String(srv) });
+        const pl = st.createDiv({ cls: "stepbtn", text: "+" });
+        const capWarn = box.createDiv({ cls: "addlab fit-warn" });
+        const upd = () => { vv.setText(String(srv)); capWarn.setText(srv > maxSrv(r) ? `⚠ over kitchen cap ${maxSrv(r)} — split cook sessions` : ""); };
+        mn.onclick = (e) => { e.stopPropagation(); srv = Math.max(1, srv - 1); upd(); };
+        pl.onclick = (e) => { e.stopPropagation(); srv = Math.min(40, srv + 1); upd(); };
+        upd();
+        const btns = box.createDiv({ cls: "addbtns" });
+        const cancel = btns.createEl("button", { cls: "abtn", text: "cancel" });
+        const add = btns.createEl("button", { cls: "abtn prim", text: "add" });
+        cancel.onclick = (e) => { e.stopPropagation(); prompting = false; srv = r.base_servings; stage(); };
+        add.onclick = (e) => { e.stopPropagation(); planEntry(r.id).servings = srv; renderAfterPlan(); };
+      };
+      stage();
+    }
+    function makeCard(r, featured) {
+      const inPlan = plan.has(r.id);
+      const pe = inPlan ? plan.get(r.id) : null;
+      const ps = plateMacros(r, pe ? pe.qtys : null, pe ? pe.ver : null);
+      const fit = targetFit(r, ps);
+      const pDanger = !!(fit && fit.cls === "fit-warn" && /protein/.test(fit.text));
+      const card = createDiv({ cls: "rcard" + (featured ? " feat" : "") });
+      const body = card.createDiv({ cls: "rcbody" });
+      const meta = body.createDiv({ cls: "rmeta2" });
+      meta.createSpan({ cls: "rrole", text: mealLabel(r) });
+      const cz = cuisineTags(r)[0];
+      if (cz) { meta.createSpan({ cls: "dot", text: "·" }); meta.createSpan({ cls: "rcuis", text: cz }); }
+      const titleBtn = body.createDiv({ cls: "rtitlebtn" });
+      titleBtn.createDiv({ cls: "rname", text: r.name });
+      if (r.subtitle) titleBtn.createDiv({ cls: "rsubt", text: r.subtitle });
+      titleBtn.onclick = () => openModal(r.id);
+      const mac = body.createDiv({ cls: "statrow" });
+      stat(mac, "kcal", Math.round(ps.cal));
+      stat(mac, "protein", g(ps.p), true, pDanger);
+      stat(mac, "carbs", g(ps.c));
+      stat(mac, "fat", g(ps.f));
+      const cost = body.createDiv({ cls: "rcostline" });
+      cost.createSpan({ cls: "rcost", text: `${money(ps.cost)} / serving` });
+      if (r.prep_min) { cost.createSpan({ cls: "dot", text: "·" }); cost.createSpan({ cls: "rprep", text: `${r.prep_min} min` }); }
+      if (r.versions && r.versions.length) {
+        const brow = body.createDiv({ cls: "rbadgerow" });
+        brow.createDiv({ cls: "rver", text: `+${r.versions.length} version${r.versions.length > 1 ? "s" : ""}` });
+      }
+      const cardTypes = typeTags(r);
+      if (cardTypes.length) {
+        const tg = body.createDiv({ cls: "rtags" });
+        cardTypes.forEach(t => tg.createSpan({ cls: "rtag", text: t }));
+      }
+      const wrow = body.createDiv({ cls: "portrow" });
+      wrow.createSpan({ cls: "pn", text: "per serving" });
+      wrow.createSpan({ cls: "pv", text: plateGramsText(r, inPlan ? plan.get(r.id).qtys : null) });
+      buildAddArea(card.createDiv({ cls: "addwrap" }), r);
+      return card;
+    }
+
+    let carIndex = 0, carTimer = null;
+    function renderCarousel() {
+      if (carTimer) { clearInterval(carTimer); carTimer = null; }
+      carEl.empty();
+      const list = featuredList(filteredCache);
+      if (!list.length) { carEl.createDiv({ cls: "carempty", text: "Nothing fits those filters." }); return; }
+      if (carIndex >= list.length) carIndex = 0;
+      const head = carEl.createDiv({ cls: "carhead" });
+      head.createSpan({ cls: "carttl serif", text: "Featured" });
+      const counter = head.createSpan({ cls: "carnum", text: `${carIndex + 1} / ${list.length}` });
+      const vp = carEl.createDiv({ cls: "carvp" });
+      const track = vp.createDiv({ cls: "cartrack" });
+      list.forEach(r => track.createDiv({ cls: "carslide" }).appendChild(makeCard(r, true)));
+      let dots = [];
+      const apply = () => {
+        track.style.transform = `translateX(-${carIndex * 100}%)`;
+        counter.setText(`${carIndex + 1} / ${list.length}`);
+        dots.forEach((d, i) => d.dataset.on = i === carIndex ? "1" : "0");
+      };
+      const go = (d) => { carIndex = (carIndex + d + list.length) % list.length; apply(); };
+      if (list.length > 1) {
+        const prev = carEl.createDiv({ cls: "carbtn prev", text: "‹" }); prev.onclick = () => go(-1);
+        const next = carEl.createDiv({ cls: "carbtn next", text: "›" }); next.onclick = () => go(1);
+        const dotsRow = carEl.createDiv({ cls: "cardots" });
+        dots = list.map((_, i) => { const d = dotsRow.createDiv({ cls: "cardot" }); d.onclick = () => { carIndex = i; apply(); }; return d; });
+      }
+      apply();
+      const start = () => { if (list.length > 1 && !carTimer) carTimer = setInterval(() => go(1), 6000); };
+      const stop = () => { if (carTimer) { clearInterval(carTimer); carTimer = null; } };
+      carEl.onmouseenter = stop; carEl.onmouseleave = start;
+      let ds = null, drag = false;
+      vp.onpointerdown = (e) => { ds = { x: e.clientX }; drag = false; };
+      vp.onpointermove = (e) => { if (ds && Math.abs(e.clientX - ds.x) > 6) drag = true; };
+      vp.onpointerup = (e) => { if (ds && drag) { const dx = e.clientX - ds.x; if (Math.abs(dx) > 40) go(dx > 0 ? -1 : 1); } ds = null; drag = false; };
+      vp.onpointercancel = () => { ds = null; drag = false; };
+      start();
+    }
+
+    function renderLibrary() {
+      libEl.empty();
+      const head = libEl.createDiv({ cls: "libhead" });
+      head.createSpan({ cls: "libttl serif", text: "All recipes" });
+      head.createSpan({ cls: "libnum", text: String(filteredCache.length) });
+      const grid = libEl.createDiv({ cls: "grid" });
+      if (!filteredCache.length) { grid.createDiv({ cls: "empty", text: "No recipes match these filters." }); return; }
+      filteredCache.forEach(r => grid.appendChild(makeCard(r, false)));
+    }
+
+    function openModal(id, verId = null, srvOverride = null, qtyOverride = null) {
+      const r = byId.get(id);
+      const entry = plan.get(id);
+      if (verId == null && entry && entry.ver) verId = entry.ver;
+      modalId = id; modalVer = verId;
+      const qtys = entry ? (entry.qtys || new Map()) : (qtyOverride || new Map());
+      const servings = entry ? entry.servings : (srvOverride ?? r.base_servings);
+      const scale = servings / r.base_servings;
+      const ings = effectiveIngredients(r, qtys);
+      const ver = versionOf(r, verId);
+      const ps = plateMacros(r, qtys, verId);
+      const mac = { ...ps };
+      const fit = targetFit(r, mac);
+      const pDanger = !!(fit && fit.cls === "fit-warn" && /protein/.test(fit.text));
+
+      modal.empty();
+      const mh = modal.createDiv({ cls: "mhdr" });
+      const mhl = mh.createDiv();
+      const kr = mhl.createDiv({ cls: "mkick" });
+      kr.createSpan({ cls: "mrole", text: mealLabel(r) });
+      const mcz = cuisineTags(r)[0];
+      if (mcz) { kr.createSpan({ cls: "dot", text: "·" }); kr.createSpan({ cls: "mcuis", text: mcz }); }
+      mhl.createDiv({ cls: "mname serif", text: r.name });
+      if (r.subtitle) mhl.createDiv({ cls: "msubt", text: r.subtitle });
+      const meta = mhl.createDiv({ cls: "mmeta" });
+      meta.createSpan({ cls: "mcost", text: `${money(ps.cost)} / serving` });
+      const prepMin = (ver && ver.prep_min) || r.prep_min;
+      if (prepMin) { meta.createSpan({ cls: "dot", text: " · " }); meta.createSpan({ text: `~${prepMin} min` }); }
+      const close = mh.createEl("button", { cls: "mclose", text: "close" });
+      close.onclick = () => { modalId = null; backdrop.removeClass("on"); };
+
+      if (r.versions && r.versions.length) {
+        const vt = modal.createDiv({ cls: "vertoggle" });
+        const mk = (vid, label) => {
+          const c = vt.createDiv({ cls: "verchip", text: label });
+          c.dataset.on = (verId || null) === (vid || null) ? "1" : "0";
+          c.onclick = () => {
+            if (plan.has(id)) { plan.get(id).ver = vid; renderAfterPlan(); }
+            openModal(id, vid ?? undefined, srvOverride, qtyOverride);
+          };
+        };
+        mk(null, "Base");
+        r.versions.forEach(v => mk(v.id, v.name));
+        if (ver && ver.swaps) {
+          const sw = vt.createDiv({ cls: "verswap" });
+          sw.setText((ver.swaps || []).map(s => `${s.from} → ${s.to}`).join(" · "));
+          if (ver.target_flag && ver.target_flag !== "ok") sw.createSpan({ cls: "flag", text: `⚠ ${ver.target_flag}` });
+        }
+      }
+
+      const mm = modal.createDiv({ cls: "statrow mstat" });
+      stat(mm, "kcal", Math.round(mac.cal));
+      stat(mm, "protein", g(mac.p), true, pDanger);
+      stat(mm, "carbs", g(mac.c));
+      stat(mm, "fat", g(mac.f));
+
+      if (r.macro_target && r.macro_target.protein_g) {
+        const t = r.macro_target; const ok = fit && fit.cls === "fit-ok";
+        const tl = modal.createDiv({ cls: "mtarget" });
+        const calPart = t.calories ? `${t.calories[0]}–${t.calories[1]} cal · ` : "";
+        tl.setText(`target ${calPart}${t.protein_g[0]}–${t.protein_g[1]}g protein · `);
+        tl.createSpan({ cls: ok ? "fit-ok" : "fit-warn", text: `this plate ${Math.round(mac.cal)} / ${Math.round(mac.p)}g ${ok ? "✓" : "⚠"}` });
+      }
+
+      const sv = modal.createDiv({ cls: "msrv" });
+      const svL = sv.createDiv({ cls: "msrvl" });
+      svL.createDiv({ cls: "msrvlab", text: "grams per serving" });
+      svL.createDiv({ cls: "msrvval serif", text: plateGramsText(r, qtys) });
+      const svR = sv.createDiv({ cls: "msrvr" });
+      svR.createDiv({ cls: "msrvlab", text: "servings" });
+      const st = svR.createDiv({ cls: "step" });
+      const mn = st.createDiv({ cls: "stepbtn", text: "−" });
+      st.createDiv({ cls: "stepval", text: String(servings) });
+      const pl = st.createDiv({ cls: "stepbtn", text: "+" });
+      const setSrv = (n) => {
+        if (plan.has(id)) { plan.get(id).servings = n; openModal(id, verId); renderAfterPlan(); }
+        else openModal(id, verId, n, qtyOverride);
+      };
+      mn.onclick = () => setSrv(Math.max(1, servings - 1));
+      pl.onclick = () => setSrv(Math.min(40, servings + 1));
+      if (servings > maxSrv(r)) svR.createDiv({ cls: "msrvlab fit-warn", text: `⚠ over kitchen cap ${maxSrv(r)} — split cook sessions` });
+
+      modal.createDiv({ cls: "msection serif", text: "Ingredients" });
+      const tbl = modal.createDiv({ cls: "ingtbl" });
+      const th = tbl.createDiv({ cls: "ingh" });
+      th.createSpan({ text: "item" });
+      th.createSpan({ cls: "r", text: "metric" }); th.createSpan({ cls: "r", text: "imperial" });
+      th.createSpan({ cls: "r", text: "unit" });
+      th.createSpan({ cls: "r", text: "batch" }); th.createSpan({ cls: "r", text: "price" });
+      ings.forEach((i, k) => {
+        const orig = r.ingredients[k];
+        const row = tbl.createDiv({ cls: "ingr" });
+        const overridden = qtys.get(orig.name) !== undefined && qtys.get(orig.name) !== orig.qty;
+        row.createSpan({ cls: overridden ? "ovr" : "", text: i.name });
+        const perServingQty = i.qty / r.base_servings;
+        const views = unitViews(i, perServingQty * i.unitSize);
+        const box = (view) => {
+          const cell = row.createDiv({ cls: "r qtycell" });
+          if (!view) {
+            cell.createSpan({ cls: "ingqty none", text: "—" });
+            cell.createSpan({ cls: "qtyunit" });
+            return;
+          }
+          const inp = cell.createEl("input", { cls: "ingqty" + (overridden ? " on" : "") });
+          inp.type = "number"; inp.min = "0"; inp.max = String(QTY_MAX); inp.step = "any";
+          inp.value = fmtAmt(view.amt);
+          inp.title = `per serving — clear to reset to the recipe`;
+          inp.dataset.qk = `${orig.name}|${view.abbr}`;
+          cell.createSpan({ cls: "qtyunit", text: view.abbr });
+          const reject = (why) => {
+            inp.addClass("bad"); inp.title = why;
+            const old = cell.querySelector(".qtyerr");
+            if (old) old.setText(why); else cell.createSpan({ cls: "qtyerr", text: why });
+          };
+          inp.oninput = () => {
+            inp.removeClass("bad"); inp.title = "per serving — clear to reset to the recipe";
+            const old = cell.querySelector(".qtyerr"); if (old) old.remove();
+          };
+          inp.onchange = () => {
+            const res = parseQtyInput(inp.value, QTY_MAX);
+            if (res.error) return reject(res.error);
+            const q = res.reset ? undefined : (res.qty * view.per / i.unitSize) * r.base_servings;
+            if (plan.has(id)) {
+              const e = planEntry(id);
+              if (res.reset) e.qtys.delete(orig.name); else e.qtys.set(orig.name, q);
+              openModal(id, verId); renderAfterPlan();
+            } else {
+              const m = qtyOverride || new Map();
+              if (res.reset) m.delete(orig.name); else m.set(orig.name, q);
+              openModal(id, verId, srvOverride, m);
+            }
+            const nb = modal.querySelector(`[data-qk="${CSS.escape(`${orig.name}|${view.abbr}`)}"]`);
+            if (nb) nb.focus();
+          };
+        };
+        box(views && views.metric);
+        box(views && views.imperial);
+        box(views && views.unit);
+        const batch = views ? `${fmtAmt(views.metric.amt * servings)} ${views.metric.abbr}` : (i.unit || "to taste");
+        row.createSpan({ cls: "r dim", text: batch });
+        row.createSpan({ cls: "r succ", text: money(i.price * scale) });
+      });
+      const tot = tbl.createDiv({ cls: "ingtot" });
+      tot.createSpan({ text: "total" });
+      tot.createSpan({ cls: "succ", text: money(ings.reduce((a, i) => a + i.price, 0) * scale) });
+
+      modal.createDiv({ cls: "msection serif", text: "Method" + (ver ? ` · ${ver.name}` : "") });
+      const steps = (ver && ver.steps) ? ver.steps : (r.steps || []);
+      const ol = modal.createDiv({ cls: "msteps" });
+      steps.forEach((s, i) => { const li = ol.createDiv({ cls: "mstep" }); li.createSpan({ cls: "mnum", text: String(i + 1).padStart(2, "0") }); li.createSpan({ cls: "mtext", text: s }); });
+
+      const foot = modal.createDiv({ cls: "mfoot" });
+      const add = foot.createEl("button", { cls: "mfootbtn" + (plan.has(id) ? " on" : ""), text: plan.has(id) ? "✓ in plan — remove" : "add to plan" });
+      add.onclick = () => {
+        if (plan.has(id)) plan.delete(id);
+        else {
+          const e = planEntry(id);
+          e.servings = servings; e.ver = verId || null;
+          if (qtyOverride && qtyOverride.size) e.qtys = new Map(qtyOverride);
+        }
+        openModal(id, verId); renderAfterPlan();
+      };
+      backdrop.addClass("on");
+    }
+
+    function renderPlan() {
+      savePlan();
+      planPanel.empty();
+      const ph = planPanel.createDiv({ cls: "phead" });
+      ph.createSpan({ cls: "ptitle serif", text: "Prep Plan" });
+      const phr = ph.createDiv({ cls: "prtop" });
+      if (plan.size) {
+        const clearChip = phr.createSpan({ cls: "vchip", text: "clear" });
+        let armed = false;
+        clearChip.onclick = () => {
+          if (!armed) { armed = true; clearChip.setText("sure? tap again"); return; }
+          plan.clear(); skipSet.clear(); vendorPick.clear();
+          savePlan(); renderAfterPlan();
+        };
+      }
+      phr.createSpan({ cls: "pcount", text: ` ${plan.size} pick${plan.size === 1 ? "" : "s"}` });
+      const body = planPanel.createDiv({ cls: "pbody" });
+      body.createDiv({ cls: "psub", text: `per-meal target ${MEAL_TARGET.cal} cal · ${MEAL_TARGET.p}g protein` });
+      if (!plan.size) { body.createDiv({ cls: "empty", text: "Add a main, a side, and rice." }); return; }
+
+      for (const [id, entry] of plan) {
+        const r = byId.get(id);
+        const ps = plateMacros(r, entry.qtys, entry.ver);
+        const pver = versionOf(r, entry.ver);
+        const row = body.createDiv({ cls: "planrow" });
+        const top = row.createDiv({ cls: "prtop" });
+        const nm = top.createDiv({ cls: "prname serif", text: pver ? `${r.name} · ${pver.name}` : r.name });
+        nm.onclick = () => openModal(id);
+        const x = top.createDiv({ cls: "prx", text: "×" });
+        x.onclick = () => { plan.delete(id); renderAfterPlan(); };
+        const mrow = row.createDiv({ cls: "prmeta" });
+        const step = mrow.createSpan({ cls: "step" });
+        const minus = step.createSpan({ cls: "stepbtn", text: "−" });
+        step.createSpan({ cls: "stepval", text: `${entry.servings}` });
+        const plus = step.createSpan({ cls: "stepbtn", text: "+" });
+        minus.onclick = () => { entry.servings = Math.max(1, entry.servings - 1); renderAfterPlan(); if (modalId === id) openModal(id, modalVer); };
+        plus.onclick = () => { entry.servings = Math.min(40, entry.servings + 1); renderAfterPlan(); if (modalId === id) openModal(id, modalVer); };
+        mrow.createSpan({ text: ` srv · ${g(ps.p)} P · ${Math.round(ps.cal)} kcal` });
+        if (entry.servings > maxSrv(r)) row.createDiv({ cls: "prmeta fit-warn", text: `⚠ over kitchen cap ${maxSrv(r)} — split cook sessions` });
+        const tweaked = [...(entry.qtys || new Map())].filter(([nm2, q]) => {
+          const line = r.ingredients.find(i => i.name === nm2);
+          return line && q !== line.qty;
+        });
+        if (tweaked.length) {
+          row.createDiv({ cls: "prqty", text: tweaked.map(([nm2, q]) => {
+            const line = r.ingredients.find(i => i.name === nm2);
+            if (line && line.unitSize && line.basis && line.basis !== "none") {
+              const unit = line.basis === "volume" ? "ml" : "g";
+              return `${nm2} ${fmtAmt(q * line.unitSize / r.base_servings)} ${unit}/srv`;
+            }
+            return `${nm2} ×${+q.toFixed(2)}`;
+          }).join(" · ") });
+        }
+      }
+
+      const planned = [...plan.keys()].map(id => byId.get(id));
+      const hasMain = planned.some(r => r.role === "main");
+      const hasSide = planned.some(r => r.role === "side");
+      const hasBase = planned.some(r => r.role === "base");
+      const comp = hasMain && hasSide && hasBase ? { t: "main + side + base ✓", ok: true }
+        : !hasMain ? { t: "pick a main to start", ok: false }
+        : !hasSide && !hasBase ? { t: "add a side + base", ok: false }
+        : !hasBase ? { t: "missing base", ok: false } : { t: "missing side", ok: false };
+      const cl = body.createDiv({ cls: "compline" });
+      cl.createSpan({ cls: "complab", text: "composition" });
+      cl.createSpan({ cls: comp.ok ? "compok" : "compwarn", text: comp.t });
+
+      const side = planned.find(r => r.role === "side");
+      const base = planned.find(r => r.role === "base");
+      const mains = planned.filter(r => r.role === "main");
+      mains.forEach(main => {
+        const parts = [main, side, base].filter(Boolean);
+        const t = parts.reduce((a, r) => { const e = plan.get(r.id); const ps = plateMacros(r, e.qtys, e.ver); return { cal: a.cal + ps.cal, p: a.p + ps.p }; }, { cal: 0, p: 0 });
+        const label = parts.map(p => p.name).join(" + ");
+        const line = body.createDiv({ cls: "mealline" });
+        line.createEl("b", { text: label });
+        const calOver = t.cal > MEAL_TARGET.cal;
+        const pShort = t.p < MEAL_TARGET.p;
+        const fitEl = line.createDiv({ cls: "mealfit" });
+        fitEl.createSpan({ cls: calOver ? "fit-over" : "fit-ok", text: `${Math.round(t.cal)} / ${MEAL_TARGET.cal} cal` });
+        fitEl.createSpan({ text: " · " });
+        fitEl.createSpan({ cls: pShort ? "fit-over" : "fit-ok", text: `${Math.round(t.p)} / ${MEAL_TARGET.p}g protein` });
+        fitEl.createSpan({ text: calOver ? " · over target" : pShort ? " · protein short" : " · fits" });
+      });
+
+      const mainSrv = mains.reduce((a, r) => a + plan.get(r.id).servings, 0);
+      if (mainSrv) {
+        const days = mainSrv / TARGETS.meals_per_day;
+        const bl = body.createDiv({ cls: "batchline" });
+        bl.createSpan({ cls: "bl", text: "days covered" });
+        bl.createSpan({ text: `${mainSrv} srv ≈ ${(+days.toFixed(1))} days` });
+      }
+    }
+
+    function shoppingItems() {
+      const map = new Map();
+      for (const [id, entry] of plan) {
+        const r = byId.get(id);
+        const scale = entry.servings / r.base_servings;
+        for (const i of effectiveIngredients(r, entry.qtys)) {
+          if (!(i.qty > 0)) continue;
+          const key = `${i.name}|${i.unit}`;
+          const cur = map.get(key) || {
+            key, name: i.name, unit: i.unit, qty: 0, cat: i.cat, amount: null,
+            yieldRatio: i.yieldRatio, buyBasis: i.buyBasis,
+            defVendor: i.vendor, options: new Map(),
+            amtLines: 0, noAmtLines: 0,
+            home: INVENTORY[i.name] !== undefined
+          };
+          cur.qty += i.qty * scale;
+          i.amount ? cur.amtLines++ : cur.noAmtLines++;
+          if (i.amount) {
+            const a = cur.amount || (cur.amount = {});
+            if (i.amount.g != null) a.g = (a.g || 0) + i.amount.g * scale;
+            if (i.amount.ml != null) a.ml = (a.ml || 0) + i.amount.ml * scale;
+            if (i.amount.ct != null) { a.ct = (a.ct || 0) + i.amount.ct * scale; a.u = i.amount.u; }
+          }
+          const addOpt = (v, price, link, asin) => {
+            const o = cur.options.get(v) || { price: 0, link: link || null, asin: asin || null };
+            o.price += price * scale;
+            if (link && !o.link) o.link = link;
+            if (asin && !o.asin) o.asin = asin;
+            cur.options.set(v, o);
+          };
+          addOpt(i.vendor, i.price, i.link, i.asin);
+          (i.alts || []).forEach(a => addOpt(a.vendor, a.price, a.link, a.asin));
+          map.set(key, cur);
+        }
+      }
+      return [...map.values()].map(item => {
+        if (item.yieldRatio && item.amount) {
+          const a = item.amount;
+          if (a.g != null) a.g /= item.yieldRatio;
+          if (a.ml != null) a.ml /= item.yieldRatio;
+          item.buyNote = `${item.buyBasis || "raw"} — recipe states cooked, ÷${item.yieldRatio}`;
+        }
+        const pick = vendorPick.get(item.key);
+        item.vendor = (pick && item.options.has(pick)) ? pick : item.defVendor;
+        const opt = item.options.get(item.vendor);
+        item.price = opt.price;
+        item.asin = opt.asin;
+        item.skipped = skipSet.has(item.key);
+        item.pack = packInfo(item);
+        return item;
+      });
+    }
+    function renderShop() {
+      shopPanel.empty();
+      const items = shoppingItems();
+      const buy = items.filter(i => !i.home);
+      const home = items.filter(i => i.home);
+      const active = buy.filter(i => !i.skipped);
+      const ph = shopPanel.createDiv({ cls: "phead" });
+      ph.createSpan({ cls: "ptitle serif", text: "Shopping List" });
+      ph.createSpan({ cls: "pcount succ", text: items.length ? money(active.reduce((a, i) => a + lineCost(i), 0)) : "" });
+      if (!items.length) {
+        shopPanel.createDiv({ cls: "pbody" }).createDiv({ cls: "empty", text: "Build a plan first." });
+        return;
+      }
+      const rounded = active.filter(i => i.pack).length;
+      shopPanel.createDiv({ cls: "pbody" }).createDiv({ cls: "psub", text: `${active.length} to buy · ${home.length} at home${buy.length - active.length ? ` · ${buy.length - active.length} skipped` : ""}${rounded ? ` · ${rounded} pack-rounded` : ""}` });
+
+      const vendors = [...new Set(buy.map(i => i.vendor))].sort();
+      vendors.forEach(v => {
+        const vitems = buy.filter(i => i.vendor === v).sort((a, b) => a.name.localeCompare(b.name));
+        const vh = shopPanel.createDiv({ cls: "vhead" });
+        vh.createSpan({ text: v });
+        vh.createSpan({ cls: "vn", text: String(vitems.length) });
+        vitems.forEach(i => {
+          const li = shopPanel.createDiv({ cls: `li${i.skipped ? " liskip" : ""}` });
+          const nm = li.createSpan({ cls: "liname", text: i.name });
+          const url = itemUrl(i);
+          if (url && !i.skipped) nm.onclick = () => window.open(url, "_blank");
+          const opts = [...i.options.keys()];
+          if (opts.length > 1 && !i.skipped) {
+            const cur = Math.max(0, opts.indexOf(i.vendor));
+            const next = opts[(cur + 1) % opts.length];
+            const chip = li.createSpan({ cls: "vchip", text: opts.length > 2 ? `⇄ ${next} · ${cur + 1}/${opts.length}` : `⇄ ${next}` });
+            chip.onclick = () => { vendorPick.set(i.key, next); savePlan(); renderShop(); };
+          }
+          const qtyEl = li.createSpan({ cls: "liqty" });
+          if (i.skipped) qtyEl.setText("skipped");
+          else if (i.pack) {
+            qtyEl.setText(`${i.pack.packs} × ${i.pack.label} · ${money(lineCost(i))} · ${i.pack.provenance === "confirmed" ? "✓" : "est"}`);
+            qtyEl.title = `needs ${i.pack.needText}${i.pack.product ? ` · ${i.pack.product}` : ""} · pack data ${i.pack.provenance} (${i.pack.src})`;
+          } else {
+            qtyEl.setText(`${i.amount ? fmtAmount(i.amount, 1) : unitPhrase(i.qty, i.unit)} · ${money(i.price)}`);
+          }
+          const x = li.createSpan({ cls: "lix", text: i.skipped ? "↩" : "✕" });
+          x.onclick = () => { i.skipped ? skipSet.delete(i.key) : skipSet.add(i.key); savePlan(); renderShop(); };
+        });
+      });
+      if (home.length) {
+        const vh = shopPanel.createDiv({ cls: "vhead" });
+        vh.createSpan({ text: "At home — don't buy" });
+        home.forEach(i => {
+          const li = shopPanel.createDiv({ cls: "li lihome" });
+          li.createSpan({ cls: "liname", text: i.name });
+          const low = LOWSTOCK.has(i.name);
+          li.createSpan({ cls: "note" + (low ? " low" : ""), text: (low ? "LOW · " : "") + INVENTORY[i.name] });
+          const used = li.createSpan({ cls: "lix", text: "used up" });
+          used.onclick = async () => {
+            try {
+              if (invDb && Array.isArray(invDb.stock) && ingDb && Array.isArray(ingDb.ingredients)) {
+                const gid = new Map(ingDb.ingredients.map(g2 => [g2.name, g2.id])).get(i.name);
+                const s = gid && invDb.stock.find(x => x.ingredient_id === gid);
+                if (s) {
+                  s.qty_on_hand = 0;
+                  s.confidence = "estimate";
+                  s.note = `used up ${todayISO()}`;
+                  await writeInventory();
+                }
+              }
+              delete INVENTORY[i.name];
+              renderShop();
+            } catch (e) { console.warn("[food] used-up failed", e); toast("Inventory save failed"); }
+          };
+        });
+      }
+      const tot = shopPanel.createDiv({ cls: "totline" });
+      const packed = active.filter(i => i.pack && i.pack.cost != null).length;
+      tot.createSpan({ text: packed ? `Est. total · ${packed}/${active.length} pack-priced` : "Est. total" });
+      tot.createSpan({ cls: "succ", text: money(active.reduce((a, i) => a + lineCost(i), 0)) });
+
+      const btns = shopPanel.createDiv({ cls: "btnrow" });
+      const copyBtn = btns.createEl("button", { cls: "abtn", text: "Copy list" });
+      const exportBtn = btns.createEl("button", { cls: "abtn commit", text: "Commit order" });
+      const amazonItems = active.filter(i => i.vendor === "Amazon" && i.asin);
+      if (amazonItems.length) {
+        const azBtn = btns.createEl("button", { cls: "abtn", text: `Amazon cart (${amazonItems.length})` });
+        azBtn.onclick = () => {
+          const params = amazonItems.map((i, k) => `ASIN.${k + 1}=${encodeURIComponent(i.asin)}&Quantity.${k + 1}=${i.pack ? i.pack.packs : 1}`).join("&");
+          window.open(`https://www.amazon.com/gp/aws/cart/add.html?${params}`, "_blank");
+        };
+      }
+      const flash = (b, t) => { const old = b.textContent; b.addClass("flash"); b.setText(t); setTimeout(() => { b.removeClass("flash"); b.setText(old); }, 1400); };
+
+      copyBtn.onclick = async () => {
+        const lines = [];
+        [...new Set(active.map(i => i.vendor))].sort().forEach(v => {
+          lines.push(`## ${v}`);
+          active.filter(i => i.vendor === v).forEach(i => lines.push(
+            i.pack
+              ? `- ${i.name} — ${i.pack.packs} × ${i.pack.label} (${money(lineCost(i))}) [needs ${i.pack.needText}]`
+              : `- ${i.name} — ${i.amount ? fmtAmount(i.amount, 1) : unitPhrase(i.qty, i.unit)} (${money(i.price)})`));
+        });
+        if (home.length) { lines.push(`## At home`); home.forEach(i => lines.push(`- ${i.name} — ${INVENTORY[i.name]}`)); }
+        try { await navigator.clipboard.writeText(lines.join("\n")); flash(copyBtn, "Copied ✓"); }
+        catch (e) { console.warn("[food] clipboard failed", e); flash(copyBtn, "Failed"); }
+      };
+      exportBtn.onclick = async () => {
+        if (exportBtn.disabled) return;
+        exportBtn.disabled = true;
+        const payload = {
+          generated: new Date().toISOString(),
+          source: "secundus-site (web)",
+          plan: [...plan.entries()].map(([id, e]) => ({
+            recipe: byId.get(id).name, servings: e.servings,
+            version: (versionOf(byId.get(id), e.ver) || {}).name || null,
+            qtys: [...(e.qtys || new Map())].map(([ing, q]) => ({ ingredient: ing, qty: q }))
+          })),
+          items: items.map(i => ({
+            name: i.name, qty: +i.qty.toFixed(2), unit: i.unit,
+            buy_amount: i.amount || null, buy_amount_text: i.amount ? fmtAmount(i.amount, 1) : unitPhrase(i.qty, i.unit),
+            vendor: i.vendor,
+            asin: i.asin || null, link: i.home ? null : itemUrl(i),
+            vendor_options: [...i.options.keys()],
+            buy_packs: i.pack ? i.pack.packs : null,
+            pack_size: i.pack ? i.pack.label : null,
+            pack_basis: i.pack ? i.pack.basis : null,
+            pack_product: i.pack ? i.pack.product : null,
+            pack_provenance: i.pack ? i.pack.provenance : null,
+            pack_source: i.pack ? i.pack.src : null,
+            est_price: +lineCost(i).toFixed(2),
+            est_price_basis: (i.pack && i.pack.cost != null) ? "pack_price" : "unit_price",
+            status: i.home ? "at_home" : (i.skipped ? "skipped" : "buy"),
+            note: i.home ? INVENTORY[i.name] : ""
+          })),
+          est_total: +active.reduce((a, i) => a + lineCost(i), 0).toFixed(2)
+        };
+        try {
+          await writeJSON(EXPORT_PATH, payload, `food: shopping list ${todayISO()} [site]`);
+          const byVendor = {};
+          active.forEach(i => { byVendor[i.vendor] = +((byVendor[i.vendor] || 0) + lineCost(i)).toFixed(2); });
+          const invDelta = [];
+          try {
+            if (invDb && Array.isArray(invDb.stock) && ingDb && Array.isArray(ingDb.ingredients)) {
+              const idByName = new Map(ingDb.ingredients.map(g2 => [g2.name, g2.id]));
+              const stockById = new Map(invDb.stock.map(s => [s.ingredient_id, s]));
+              const today = todayISO();
+              active.forEach(i => {
+                const gid = idByName.get(i.name);
+                if (!gid) return;
+                let add, unit;
+                if (i.amount && i.amount.g != null) { add = i.amount.g; unit = "g"; }
+                else if (i.amount && i.amount.ml != null) { add = i.amount.ml; unit = "ml"; }
+                else if (i.amount && i.amount.ct != null) { add = i.amount.ct; unit = i.amount.u || i.unit || "unit"; }
+                else { add = Number(i.qty) || 0; unit = i.unit || "unit"; }
+                add = +add.toFixed(2);
+                if (add <= 0) return;
+                const ex = stockById.get(gid);
+                if (ex && ex.unit === unit) {
+                  ex.qty_on_hand = +(((Number(ex.qty_on_hand) || 0) + add).toFixed(2));
+                  ex.confidence = "estimate";
+                  ex.note = `+${add} ${unit} bought ${today}`;
+                  invDelta.push({ ingredient_id: gid, add, unit, created: false });
+                } else if (ex) {
+                  ex.confidence = "estimate";
+                  ex.note = `bought ${add} ${unit} ${today} (unit mismatch with "${ex.unit}" — not summed)`;
+                } else {
+                  const ni = { ingredient_id: gid, qty_on_hand: add, unit, confidence: "estimate", note: `bought ${today}` };
+                  invDb.stock.push(ni);
+                  stockById.set(gid, ni);
+                  invDelta.push({ ingredient_id: gid, add, unit, created: true });
+                }
+              });
+              await writeInventory();
+            }
+          } catch (e) { console.warn("[food] inventory bump failed (commit still ok)", e); }
+          spendLog.push({
+            ts: new Date().toISOString(), week_start: weekStartISO(new Date()),
+            est_total: payload.est_total, by_vendor: byVendor, items: active.length,
+            inv_delta: invDelta
+          });
+          await writeJSON(SPEND_PATH, spendLog, `food: grocery spend entry ${todayISO()} [site]`);
+          flash(exportBtn, "Committed ✓");
+          renderSpend();
+        }
+        catch (e) { console.warn("[food] commit failed", e); flash(exportBtn, "Failed"); toast("Commit failed — nothing written"); }
+        finally { exportBtn.disabled = false; }
+      };
+    }
+
+    function renderSpend() {
+      spendPanel.empty();
+      const ph = spendPanel.createDiv({ cls: "phead" });
+      ph.createSpan({ cls: "ptitle serif", text: "Grocery Spend" });
+      ph.createSpan({ cls: "pcount", text: spendLog.length ? `${spendLog.length} order${spendLog.length === 1 ? "" : "s"}` : "" });
+      const body = spendPanel.createDiv({ cls: "pbody" });
+      if (!spendLog.length) { body.createDiv({ cls: "empty", text: "No orders committed yet." }); return; }
+      const budget = Number(TARGETS.grocery_week_usd) || null;
+      const thisWeek = weekStartISO(new Date());
+      const weeks = new Map();
+      spendLog.forEach(e => {
+        const w = weeks.get(e.week_start) || { total: 0, orders: 0 };
+        w.total += e.est_total; w.orders += 1;
+        weeks.set(e.week_start, w);
+      });
+      [...weeks.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 4).forEach(([wk, w]) => {
+        const li = body.createDiv({ cls: "li" });
+        li.createSpan({ cls: "liname", text: `wk of ${wk.slice(5)}${wk === thisWeek ? " · now" : ""}` });
+        const overBudget = budget != null && w.total > budget;
+        const q = li.createSpan({ cls: "liqty", text: `${money(w.total)}${budget != null && wk === thisWeek ? ` / ${money(budget)}` : ""} · ${w.orders} order${w.orders === 1 ? "" : "s"}` });
+        if (overBudget) q.style.color = "var(--warn)";
+      });
+      const last = spendLog[spendLog.length - 1];
+      const btns = spendPanel.createDiv({ cls: "btnrow" });
+      const undo = btns.createEl("button", { cls: "abtn", text: "Undo last commit" });
+      if (!last.inv_delta) undo.title = "older order: removes the spend entry only, inventory untouched";
+      let armed = false;
+      undo.onclick = async () => {
+        if (!armed) { armed = true; undo.setText(`Undo ${money(last.est_total)} — sure?`); return; }
+        undo.disabled = true;
+        try {
+          (last.inv_delta || []).forEach(d => {
+            const s = invDb.stock.find(x => x.ingredient_id === d.ingredient_id);
+            if (!s) return;
+            if (d.created) invDb.stock.splice(invDb.stock.indexOf(s), 1);
+            else {
+              s.qty_on_hand = Math.max(0, +((Number(s.qty_on_hand) || 0) - d.add).toFixed(2));
+              s.confidence = "estimate";
+              s.note = `undo commit ${todayISO()}`;
+            }
+          });
+          if ((last.inv_delta || []).length) await writeInventory();
+          spendLog.pop();
+          await writeJSON(SPEND_PATH, spendLog, `food: undo last order [site]`);
+          renderShop(); renderSpend();
+        } catch (e) { console.warn("[food] undo failed", e); undo.setText("Failed"); undo.disabled = false; }
+      };
+    }
+
+    buildFilters();
+    renderContent();
+    renderPlan();
+    renderShop();
+    renderSpend();
   }
 
   return { mount };
