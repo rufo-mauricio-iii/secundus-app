@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#120a14">
 <title>Secundus</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   /* ---------- app shell (Renovatio-dark, matches the Health apps) ---------- */
@@ -307,7 +309,9 @@ async function imageURL(path) {
 }
 
 /* ============================== app shell ============================== */
-const SPACES = ["workout", "food", "board", "tracking", "brief", "queue"];
+/* Spaces exposed in this build — others exist in code but stay dark until
+   their milestone ships (user: "just keep it to workout for now"). */
+const SPACES = ["workout"];
 const $ = id => document.getElementById(id);
 function el(parent, tag, cls, text) {
   const n = document.createElement(tag);
@@ -332,8 +336,12 @@ function boot() {
   const nav = $("nav");
   nav.innerHTML = SPACES.map(s => `<button data-space="${s}">${s}</button>`).join("");
   nav.onclick = e => e.target.dataset.space && show(e.target.dataset.space);
-  nav.hidden = false;
-  verifyConnection().then(ok => { if (ok) show(localStorage.getItem("secundus.space") || "workout"); });
+  nav.hidden = SPACES.length < 2;   // one space = no tab bar to explain
+  verifyConnection().then(ok => {
+    if (!ok) return;
+    const saved = localStorage.getItem("secundus.space");
+    show(SPACES.includes(saved) ? saved : SPACES[0]);
+  });
 }
 async function verifyConnection() {
   const dot = $("sync-dot"), label = $("sync-label");
@@ -357,6 +365,10 @@ $("connect").onclick = () => {
   boot();
 };
 if (store.pat && store.repo) boot();
+/* PWA install support — passthrough worker, no caching (updates stay instant) */
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 
 /* ====================================================================
    WORKOUT — faithful port of orgs/health/Workout.md (Renovatio skin).

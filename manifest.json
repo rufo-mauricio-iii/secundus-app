@@ -1,0 +1,13 @@
+{
+  "name": "Secundus",
+  "short_name": "Secundus",
+  "description": "Secundus daily loop — workout, on any surface",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#120a14",
+  "theme_color": "#120a14",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
