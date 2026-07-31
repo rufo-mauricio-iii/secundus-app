@@ -21,12 +21,16 @@
     --ok:#a6e3a1; --err:#f38ba8;
   }
   * { box-sizing:border-box; margin:0; }
-  html,body { height:100%; }
-  body { background:var(--bg); color:var(--fg); font:15px/1.5 var(--body); display:flex; flex-direction:column; }
+  /* min-height, not height: a viewport-height body is the sticky containing
+     block, so it scrolls away and takes the pinned topbar with it */
+  html { height:100%; }
+  body { min-height:100%; background:var(--bg); color:var(--fg); font:15px/1.5 var(--body); display:flex; flex-direction:column; }
+  /* header + tab bar travel together and stay pinned — losing the tabs mid-scroll
+     strands you inside a space with no way back (reported on phone 2026-07-31) */
+  .topbar { position:sticky; top:0; z-index:30; background:var(--card); }
   header.app {
     display:flex; align-items:center; gap:10px; padding:10px 14px;
-    background:var(--card); position:sticky; top:0; z-index:10;
-    border-bottom:1px solid var(--hairline);
+    background:var(--card); border-bottom:1px solid var(--hairline);
   }
   header.app h1 { font-family:var(--serif); font-size:16px; font-weight:700; color:var(--gold); flex:1; }
   #sync-dot { width:9px; height:9px; border-radius:50%; background:var(--faint); }
@@ -275,7 +279,7 @@
    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;user-select:none}
   .food .stepbtn:hover{border-color:var(--gold-dim)}
   .food .stepval{font-family:var(--mono);font-size:13px;min-width:34px;text-align:center;color:var(--gold)}
-  .food .side{position:sticky;top:12px;display:grid;gap:16px;min-width:0}
+  .food .side{position:sticky;top:96px;display:grid;gap:16px;min-width:0}  /* clears the pinned topbar (84px) */
   @container (max-width:820px){.food .side{position:static}}
   .food .panel{background:var(--card);border:1px solid var(--bord);border-radius:4px;overflow:hidden}
   .food .phead{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--bord);padding:12px 15px}
@@ -409,12 +413,14 @@
 </style>
 </head>
 <body>
-<header class="app">
-  <h1>Secundus</h1>
-  <span id="sync-label"></span>
-  <span id="sync-dot" title="repo connection"></span>
-</header>
-<nav class="app" id="nav" hidden></nav>
+<div class="topbar">
+  <header class="app">
+    <h1>Secundus</h1>
+    <span id="sync-label"></span>
+    <span id="sync-dot" title="repo connection"></span>
+  </header>
+  <nav class="app" id="nav" hidden></nav>
+</div>
 <main>
   <section id="gate" class="view active">
     <div class="card">
