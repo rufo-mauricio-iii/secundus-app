@@ -3,100 +3,190 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1e1e2e">
+<meta name="theme-color" content="#120a14">
 <title>Secundus</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
+  /* ---------- app shell (Renovatio-dark, matches the Health apps) ---------- */
   :root {
-    --bg: #1e1e2e; --panel: #27273a; --panel-2: #2f2f45;
-    --text: #cdd6f4; --muted: #8a8fa8; --accent: #89b4fa;
-    --ok: #a6e3a1; --warn: #f9e2af; --err: #f38ba8;
-    --radius: 10px;
+    --bg:#120a14; --fg:#f0e8dc; --card:#1a111d; --card2:#231829;
+    --hairline:#ffffff10; --dim:#a89f9a; --faint:#6b6068; --cue:#8b8078;
+    --gold:#c9a86c; --gold-dim:rgba(201,168,108,.45); --gold-wash:rgba(201,168,108,.08);
+    --done:#7a9b7a; --crimson:#9b3b4a;
+    --serif:'Libre Baskerville',Georgia,serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --ok:#a6e3a1; --err:#f38ba8;
   }
-  * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; }
-  body {
-    background: var(--bg); color: var(--text);
-    font: 15px/1.5 system-ui, "Segoe UI", Roboto, sans-serif;
-    display: flex; flex-direction: column;
+  * { box-sizing:border-box; margin:0; }
+  html,body { height:100%; }
+  body { background:var(--bg); color:var(--fg); font:15px/1.5 var(--body); display:flex; flex-direction:column; }
+  header.app {
+    display:flex; align-items:center; gap:10px; padding:10px 14px;
+    background:var(--card); position:sticky; top:0; z-index:10;
+    border-bottom:1px solid var(--hairline);
   }
-  header {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; background: var(--panel);
-    position: sticky; top: 0; z-index: 10;
+  header.app h1 { font-family:var(--serif); font-size:16px; font-weight:700; color:var(--gold); flex:1; }
+  #sync-dot { width:9px; height:9px; border-radius:50%; background:var(--faint); }
+  #sync-dot.ok { background:var(--ok); } #sync-dot.err { background:var(--err); }
+  #sync-label { font-family:var(--mono); font-size:11px; color:var(--faint); }
+  nav.app {
+    display:flex; gap:0; padding:0 8px; overflow-x:auto; background:var(--card);
+    border-bottom:1px solid var(--hairline); scrollbar-width:none;
   }
-  header h1 { font-size: 16px; font-weight: 600; flex: 1; }
-  #sync-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
-  #sync-dot.ok { background: var(--ok); }
-  #sync-dot.err { background: var(--err); }
-  #sync-label { font-size: 12px; color: var(--muted); }
-  nav {
-    display: flex; gap: 4px; padding: 6px 8px; overflow-x: auto;
-    background: var(--panel); border-bottom: 1px solid #00000033;
+  nav.app::-webkit-scrollbar { display:none; }
+  nav.app button {
+    border:0; background:transparent; color:var(--faint); padding:11px 16px;
+    font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+    cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent;
   }
-  nav button {
-    border: 0; background: transparent; color: var(--muted);
-    padding: 8px 14px; border-radius: var(--radius); font-size: 14px;
-    cursor: pointer; white-space: nowrap;
-  }
-  nav button.active { background: var(--panel-2); color: var(--text); font-weight: 600; }
-  main { flex: 1; padding: 14px; max-width: 1100px; width: 100%; margin: 0 auto; }
-  .view { display: none; }
-  .view.active { display: block; }
-  .card {
-    background: var(--panel); border-radius: var(--radius);
-    padding: 16px; margin-bottom: 12px;
-  }
-  .placeholder { color: var(--muted); font-style: italic; }
-  /* settings / PAT gate */
-  #gate { max-width: 420px; margin: 8vh auto; }
+  nav.app button.active { color:var(--gold); border-bottom-color:var(--gold); background:var(--gold-wash); }
+  main { flex:1; padding:14px; max-width:1100px; width:100%; margin:0 auto; }
+  .view { display:none; } .view.active { display:block; }
+  .card { background:var(--card); border:1px solid var(--hairline); border-radius:4px; padding:16px; margin-bottom:12px; }
+  .placeholder { color:var(--faint); font-style:italic; }
+  #gate { max-width:420px; margin:8vh auto; }
   #gate input, #gate select {
-    width: 100%; padding: 10px; margin: 6px 0 14px;
-    border-radius: 8px; border: 1px solid #00000055;
-    background: var(--panel-2); color: var(--text); font-size: 14px;
+    width:100%; padding:10px; margin:6px 0 14px; border-radius:2px;
+    border:1px solid var(--hairline); background:var(--card2); color:var(--fg); font-size:14px;
   }
   #gate button, .btn {
-    background: var(--accent); color: #11111b; border: 0;
-    padding: 10px 18px; border-radius: 8px; font-size: 14px;
-    font-weight: 600; cursor: pointer;
+    background:none; color:var(--gold); border:1px solid var(--gold-dim);
+    padding:10px 18px; border-radius:2px; font-family:var(--mono); font-size:12px;
+    letter-spacing:.2em; text-transform:uppercase; cursor:pointer;
   }
-  .note { font-size: 12px; color: var(--muted); }
+  #gate button:hover, .btn:hover { background:var(--gold-wash); }
+  .note-sm { font-size:12px; color:var(--faint); }
   #toast {
-    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-    background: var(--panel-2); color: var(--text); padding: 10px 18px;
-    border-radius: 8px; font-size: 13px; display: none; z-index: 20;
-    box-shadow: 0 4px 16px #00000066;
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:var(--card2); color:var(--fg); padding:10px 18px; border:1px solid var(--hairline);
+    border-radius:2px; font-family:var(--mono); font-size:12px; display:none; z-index:60;
+    box-shadow:0 4px 16px #00000066; max-width:90vw;
   }
-  @media (min-width: 720px) {
-    nav { justify-content: center; }
-    main { padding: 24px; }
+  @media (min-width:720px) { nav.app { justify-content:center; } main { padding:24px; } }
+
+  /* ---------- Workout · Renovatio skin (ported from Workout.md) ---------- */
+  .wkt{ color:var(--fg); background:var(--bg); font-family:var(--body);
+    width:100%; max-width:none; font-size:15px; line-height:1.5; padding:4px 0 28px;
+    --fs-xs:10px; --fs-sm:12px; --fs-md:15px; --fs-lg:16px; --fs-xl:22px; }
+  .wkt .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .wkt .label{font-family:var(--mono);font-size:var(--fs-xs);letter-spacing:.3em;text-transform:uppercase;color:var(--gold-dim)}
+  .wkt .hdr{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--hairline)}
+  .wkt .kick{font-family:var(--mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--crimson);margin-bottom:6px}
+  .wkt .brand{font-family:var(--serif);font-weight:700;font-size:30px;line-height:1;color:var(--gold)}
+  .wkt .hdate{font-family:var(--mono);font-size:var(--fs-xs);letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+  .wkt .sub{font-family:var(--mono);font-size:11px;color:var(--faint);margin:10px 0 18px;line-height:1.6}
+  .wkt .tabs{display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--hairline);scrollbar-width:none}
+  .wkt .tabs::-webkit-scrollbar{display:none}
+  .wkt .tab{flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:12px 18px 10px;cursor:pointer;
+    border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;text-align:left;user-select:none}
+  .wkt .tab[data-on="1"]{border-bottom-color:var(--gold);background:var(--gold-wash)}
+  .wkt .tabname{font-family:var(--serif);font-weight:600;font-size:var(--fs-md);color:var(--dim);letter-spacing:.05em}
+  .wkt .tab[data-on="1"] .tabname{color:var(--gold)}
+  .wkt .tabsub{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+  .wkt .gutter{display:flex;align-items:center;gap:16px;margin:18px 0 26px;flex-wrap:wrap}
+  .wkt .gears{display:inline-flex;border:1px solid var(--hairline);border-radius:2px;overflow:hidden}
+  .wkt .gear{padding:8px 18px;background:none;border:none;cursor:pointer;color:var(--faint);
+    font-family:var(--mono);font-size:var(--fs-xs);letter-spacing:.25em;text-transform:uppercase}
+  .wkt .gear + .gear{border-left:1px solid var(--hairline)}
+  .wkt .gear[data-on="1"]{color:var(--gold);background:var(--gold-wash)}
+  .wkt .dhead{margin-bottom:22px}
+  .wkt .dtitle{font-family:var(--serif);font-weight:700;font-size:var(--fs-xl);line-height:1.2;margin:0}
+  .wkt .dtag{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);margin-top:7px}
+  .wkt .section{margin-bottom:26px}
+  .wkt .shead{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+  .wkt .stitle{font-family:var(--serif);font-size:13px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);white-space:nowrap}
+  .wkt .srule{flex:1;height:1px;background:var(--hairline)}
+  .wkt .smeta{font-family:var(--mono);font-size:var(--fs-xs);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+  .wkt .grid{display:grid;gap:14px}
+  .wkt .mc{position:relative;display:grid;grid-template-columns:320px 1fr;border:1px solid var(--hairline);background:var(--card);overflow:hidden;border-radius:4px}
+  .wkt .mc.done{border-color:var(--gold-dim)}
+  .wkt .mcfig{position:relative;background:var(--card2);border-right:1px solid var(--hairline);min-height:170px}
+  .wkt .mcfig img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:zoom-in;display:block}
+  .wkt .mcph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:var(--fs-xs);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);
+    background-image:repeating-linear-gradient(45deg,transparent 0,transparent 9px,rgba(201,168,108,.04) 9px,rgba(201,168,108,.04) 10px)}
+  .wkt .mcbody{position:relative;padding:18px 20px 16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+  .wkt .mckicker{display:flex;align-items:center;gap:10px}
+  .wkt .mcrule{height:1px;width:26px;background:var(--gold);flex:0 0 auto}
+  .wkt .mckick{font-family:var(--mono);font-size:var(--fs-xs);letter-spacing:.3em;text-transform:uppercase;color:var(--gold)}
+  .wkt .mcname{font-family:var(--serif);font-weight:600;font-size:var(--fs-xl);line-height:1.15;margin:6px 0 0}
+  .wkt .mcmeta{display:flex;flex-wrap:wrap;gap:3px 16px;font-family:var(--mono);font-size:var(--fs-xs);
+    letter-spacing:.18em;text-transform:uppercase;color:var(--faint);margin-top:7px}
+  .wkt .mcrx{color:var(--gold)}
+  .wkt .mccues{margin:0;padding:0;list-style:none}
+  .wkt .mccue{font-family:var(--mono);font-size:var(--fs-sm);color:var(--cue);display:grid;grid-template-columns:26px 1fr;gap:8px;padding:3px 0;line-height:1.55}
+  .wkt .mccuen{color:var(--gold-dim)}
+  .wkt .mccuet{font-family:var(--mono);font-size:var(--fs-xs);letter-spacing:.3em;text-transform:uppercase;color:var(--gold);margin-bottom:7px}
+  .wkt .mcctrl{display:flex;gap:26px;align-items:flex-end;padding-top:13px;border-top:1px solid var(--hairline)}
+  .wkt .fieldlab{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:4px}
+  .wkt .field{min-width:82px}
+  .wkt .inp{width:100%;background:transparent;border:none;border-bottom:1px solid var(--hairline);color:var(--fg);
+    font-family:var(--mono);font-size:18px;padding:3px 0;font-variant-numeric:tabular-nums;outline:none}
+  .wkt .inp:focus{border-bottom-color:var(--gold);color:var(--gold)}
+  .wkt .hold{font-family:var(--mono);font-size:var(--fs-sm);letter-spacing:.15em;text-transform:uppercase;
+    padding:9px 18px;background:none;color:var(--gold);border:1px solid var(--gold-dim);cursor:pointer;border-radius:2px}
+  .wkt .hold.run{color:var(--fg);border-color:var(--gold);background:var(--gold-wash)}
+  .wkt .hold.fin{color:var(--done);border-color:rgba(122,155,122,.5)}
+  .wkt .mcfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:11px;
+    border-top:1px solid var(--hairline);font-family:var(--mono);font-size:var(--fs-xs);color:var(--faint)}
+  .wkt .dots{color:var(--gold-dim);letter-spacing:3px;cursor:pointer;user-select:none}
+  .wkt .trend svg{display:block;margin-top:6px}
+  .wkt .trendlab{font-family:var(--mono);font-size:var(--fs-xs);color:var(--faint)}
+  .wkt .prose{border:1px solid var(--hairline);background:var(--card);padding:16px 20px;font-size:var(--fs-md);line-height:1.65;color:var(--dim);border-radius:4px}
+  .wkt .note{border-left:2px solid var(--gold);background:var(--gold-wash);padding:13px 17px;font-size:var(--fs-md);line-height:1.6;color:var(--dim);margin-bottom:22px}
+  .wkt .jm{border:1px solid var(--hairline);background:var(--card);padding:20px 22px;border-radius:4px}
+  .wkt .jmitem{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:6px 0;font-size:var(--fs-md);color:var(--dim);line-height:1.55}
+  .wkt .jmn{font-family:var(--mono);font-size:var(--fs-xs);color:var(--gold-dim);padding-top:4px}
+  .wkt .yoga{display:flex;align-items:center;gap:14px;border-left:2px solid var(--gold);background:var(--gold-wash);padding:13px 17px;margin-bottom:22px}
+  .wkt .tick{width:30px;height:30px;flex:0 0 auto;border:1px solid var(--gold-dim);background:none;color:var(--gold);
+    display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer}
+  .wkt .tick[data-on="1"]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+  .wkt .yogatxt{font-family:var(--mono);font-size:var(--fs-sm);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .wkt .stale{border-left:2px solid #b0563c;background:rgba(176,86,60,.10);padding:13px 17px;margin:14px 0 4px;
+    font-family:var(--mono);font-size:var(--fs-sm);color:#d08a6e;letter-spacing:.05em;line-height:1.6}
+  .wkt .sessionbar{margin-top:30px;padding-top:22px;border-top:1px solid var(--hairline)}
+  .wkt .sessionbtn{width:100%;padding:17px;background:none;border:1px solid var(--gold-dim);color:var(--gold);cursor:pointer;
+    font-family:var(--mono);font-size:var(--fs-sm);letter-spacing:.3em;text-transform:uppercase;border-radius:2px}
+  .wkt .sessionbtn:hover{background:var(--gold-wash)}
+  .wkt .sessionbtn[data-on="1"]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+  .wkt .lightbox{display:none;position:fixed;inset:0;z-index:50;background:rgba(10,10,10,.94);
+    align-items:center;justify-content:center;cursor:zoom-out;padding:24px}
+  .wkt .lightbox.on{display:flex}
+  .wkt .lightbox img{max-width:94vw;max-height:88vh;border:1px solid var(--hairline)}
+  .wkt .lightbox .cap{position:fixed;bottom:26px;left:0;right:0;text-align:center;color:var(--dim);
+    font-family:var(--mono);font-size:var(--fs-sm);letter-spacing:.2em;text-transform:uppercase}
+  @media (max-width:640px){
+    .wkt .mc{grid-template-columns:1fr}
+    .wkt .mcfig{aspect-ratio:16/9;min-height:0;border-right:none;border-bottom:1px solid var(--hairline)}
+    .wkt .mcname{font-size:var(--fs-lg)}
+    .wkt .mcctrl{gap:16px}
   }
 </style>
 </head>
 <body>
-<header>
+<header class="app">
   <h1>Secundus</h1>
   <span id="sync-label"></span>
   <span id="sync-dot" title="repo connection"></span>
 </header>
-<nav id="nav" hidden></nav>
+<nav class="app" id="nav" hidden></nav>
 <main>
-  <!-- PAT / repo gate -->
   <section id="gate" class="view active">
     <div class="card">
-      <h2 style="margin-bottom:10px">Connect to your repo</h2>
-      <label>GitHub fine-grained token (Contents read/write, one repo)</label>
+      <h2 style="margin-bottom:10px;font-family:var(--serif)">Connect to your repo</h2>
+      <label class="note-sm">GitHub fine-grained token (Contents read/write)</label>
       <input id="pat" type="password" placeholder="github_pat_…" autocomplete="off">
-      <label>Repo</label>
+      <label class="note-sm">Repo</label>
       <select id="repo-select">
         <option value="rufo-mauricio-iii/secundus-site">secundus-site (build sandbox)</option>
         <option value="rufo-mauricio-iii/secundus_os">secundus_os (LIVE canon)</option>
       </select>
       <button id="connect">Connect</button>
-      <p class="note" style="margin-top:12px">Token stays in this device's browser storage only.</p>
+      <p class="note-sm" style="margin-top:12px">Token stays in this device's browser storage only.</p>
     </div>
   </section>
-  <!-- spaces (placeholders until their milestone ships) -->
-  <section id="view-workout" class="view"><div class="card"><h2>Workout</h2><p class="placeholder">M1 — next-up card, form, tick/log/timer.</p></div></section>
+  <section id="view-workout" class="view"></section>
   <section id="view-food" class="view"><div class="card"><h2>Food</h2><p class="placeholder">M2 — recipes, meal log, macro badge.</p></div></section>
   <section id="view-board" class="view"><div class="card"><h2>Board</h2><p class="placeholder">M3 — 6 lanes, 4 domains.</p></div></section>
   <section id="view-tracking" class="view"><div class="card"><h2>Tracking</h2><p class="placeholder">M4 — habit ticks + capture.</p></div></section>
@@ -107,7 +197,7 @@
 
 <script>
 "use strict";
-/* ---------- rails: the one door to the repo ---------- */
+/* ======================= rails: the one door to the repo ======================= */
 const API = "https://api.github.com";
 const store = {
   get pat()  { return localStorage.getItem("secundus.pat") || ""; },
@@ -117,7 +207,8 @@ const store = {
 };
 
 async function gh(path, opts = {}) {
-  const res = await fetch(`${API}/repos/${store.repo}/${path}`, {
+  const url = path ? `${API}/repos/${store.repo}/${path}` : `${API}/repos/${store.repo}`;
+  const res = await fetch(url, {
     ...opts,
     headers: {
       "Authorization": `Bearer ${store.pat}`,
@@ -126,90 +217,656 @@ async function gh(path, opts = {}) {
       ...(opts.headers || {}),
     },
   });
-  if (!res.ok && res.status !== 409 && res.status !== 422) {
-    throw new Error(`GitHub ${res.status} on ${path}`);
-  }
   return res;
 }
-
-/* read a file: returns { data, sha } (data = parsed JSON or raw text) */
+function b64decode(b64) {
+  return new TextDecoder().decode(Uint8Array.from(atob(String(b64).replaceAll("\n", "")), c => c.charCodeAt(0)));
+}
+function b64encode(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = ""; for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+/* read one file -> { data (parsed json or raw), sha } ; null if 404 */
 async function readFile(path) {
-  const res = await gh(`contents/${encodeURIComponent(path).replaceAll("%2F", "/")}?t=${Date.now()}`);
+  const res = await gh(`contents/${path}?t=${Date.now()}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub ${res.status} reading ${path}`);
   const body = await res.json();
-  const raw = new TextDecoder().decode(Uint8Array.from(atob(body.content.replaceAll("\n", "")), c => c.charCodeAt(0)));
+  const raw = b64decode(body.content);
   let data; try { data = JSON.parse(raw); } catch { data = raw; }
   return { data, sha: body.sha, raw };
 }
-
-/* the save function: fresh-read, mutate, PUT with SHA; on race re-read + re-apply (3 tries).
-   mutate(data) returns the new data object. Every write stamps source + updated_at. */
-async function saveFile(path, mutate, message) {
+/* list a directory -> [{name, path, sha}] ; [] if 404 */
+async function listDir(path) {
+  const res = await gh(`contents/${path}?t=${Date.now()}`);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`GitHub ${res.status} listing ${path}`);
+  return (await res.json()).map(f => ({ name: f.name, path: f.path, sha: f.sha }));
+}
+/* write a file (create or update). shaMap caches shas so repeat writes skip a read. */
+const shaMap = new Map();
+async function writeRaw(path, text, message) {
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const { data, sha } = await readFile(path);
-    const next = mutate(structuredClone(data));
-    if (next && typeof next === "object" && !Array.isArray(next)) {
-      next.updated_at = new Date().toISOString();
-      next.source = "secundus-site";
+    const body = { message, content: b64encode(text) };
+    if (shaMap.has(path)) body.sha = shaMap.get(path);
+    const res = await gh(`contents/${path}`, { method: "PUT", body: JSON.stringify(body) });
+    if (res.ok) {
+      const j = await res.json();
+      shaMap.set(path, j.content.sha);
+      return true;
     }
-    const content = btoa(String.fromCharCode(...new TextEncoder().encode(
-      typeof next === "string" ? next : JSON.stringify(next, null, 2) + "\n")));
-    const res = await gh(`contents/${path}`, {
-      method: "PUT",
-      body: JSON.stringify({ message: message || `site: update ${path}`, content, sha }),
-    });
-    if (res.ok) return true;               // committed
-    if (attempt === 3) throw new Error(`save conflict persisted on ${path}`);
-    await new Promise(r => setTimeout(r, 400 * attempt));   // raced — retry fresh
+    if (res.status === 409 || res.status === 422) {   // raced or stale/missing sha — refresh and retry
+      const cur = await readFile(path);
+      if (cur) shaMap.set(path, cur.sha); else shaMap.delete(path);
+      await new Promise(r => setTimeout(r, 350 * attempt));
+      continue;
+    }
+    throw new Error(`GitHub ${res.status} writing ${path}`);
+  }
+  throw new Error(`write conflict persisted on ${path}`);
+}
+async function deleteFile(path, message) {
+  if (!shaMap.has(path)) {
+    const cur = await readFile(path);
+    if (!cur) return true;
+    shaMap.set(path, cur.sha);
+  }
+  const res = await gh(`contents/${path}`, {
+    method: "DELETE",
+    body: JSON.stringify({ message, sha: shaMap.get(path) }),
+  });
+  if (res.ok || res.status === 404) { shaMap.delete(path); return true; }
+  throw new Error(`GitHub ${res.status} deleting ${path}`);
+}
+/* read-modify-write with conflict retry for shared JSON docs (sessions etc.) */
+async function saveJSON(path, mutate, message) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const cur = await readFile(path);
+    const data = cur ? cur.data : {};
+    if (cur) shaMap.set(path, cur.sha);
+    const next = mutate(structuredClone(data));
+    try {
+      await writeRaw(path, JSON.stringify(next, null, 2) + "\n", message);
+      return next;
+    } catch (e) {
+      if (attempt === 3) throw e;
+      await new Promise(r => setTimeout(r, 350 * attempt));
+    }
   }
 }
+/* private-repo image -> blob URL (cached) */
+const imgCache = new Map();
+async function imageURL(path) {
+  if (imgCache.has(path)) return imgCache.get(path);
+  const res = await gh(`contents/${path}`, { headers: { "Accept": "application/vnd.github.raw+json" } });
+  if (!res.ok) throw new Error(`img ${res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  imgCache.set(path, url);
+  return url;
+}
 
-/* ---------- shell ---------- */
+/* ============================== app shell ============================== */
 const SPACES = ["workout", "food", "board", "tracking", "brief", "queue"];
 const $ = id => document.getElementById(id);
-
+function el(parent, tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  parent.appendChild(n);
+  return n;
+}
 function toast(msg, ms = 2500) {
   const t = $("toast"); t.textContent = msg; t.style.display = "block";
   clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms);
 }
-
 function show(space) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   $(`view-${space}`).classList.add("active");
-  document.querySelectorAll("#nav button").forEach(b =>
+  document.querySelectorAll("nav.app button").forEach(b =>
     b.classList.toggle("active", b.dataset.space === space));
   localStorage.setItem("secundus.space", space);
+  if (space === "workout") Workout.mount();
 }
-
 function boot() {
   const nav = $("nav");
-  nav.innerHTML = SPACES.map(s =>
-    `<button data-space="${s}">${s[0].toUpperCase() + s.slice(1)}</button>`).join("");
+  nav.innerHTML = SPACES.map(s => `<button data-space="${s}">${s}</button>`).join("");
   nav.onclick = e => e.target.dataset.space && show(e.target.dataset.space);
   nav.hidden = false;
-  show(localStorage.getItem("secundus.space") || "workout");
-  verifyConnection();
+  verifyConnection().then(ok => { if (ok) show(localStorage.getItem("secundus.space") || "workout"); });
 }
-
 async function verifyConnection() {
   const dot = $("sync-dot"), label = $("sync-label");
   try {
-    await gh("");                          // repo metadata = cheapest auth check
+    const res = await gh("");
+    if (!res.ok) throw new Error(res.status);
     dot.className = "ok"; label.textContent = store.repo.split("/")[1];
+    return true;
   } catch {
     dot.className = "err"; label.textContent = "connection failed";
     toast("Repo connection failed — check token", 4000);
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    $("gate").classList.add("active");
+    return false;
   }
 }
-
 $("connect").onclick = () => {
   const pat = $("pat").value.trim();
   if (!pat) { toast("Paste a token first"); return; }
   store.pat = pat; store.repo = $("repo-select").value;
   boot();
 };
-
-/* skip the gate when this device already connected */
 if (store.pat && store.repo) boot();
+
+/* ====================================================================
+   WORKOUT — faithful port of orgs/health/Workout.md (Renovatio skin).
+   Same files, same entry schema; the PC widget and /workout-review
+   read what this writes. Append-only log: one JSON per movement/day.
+   ==================================================================== */
+const Workout = (() => {
+  const WEEK_PATH     = "orgs/health/data/workout/workout-week.json";
+  const LOG_DIR       = "orgs/health/data/workout/workout-log";
+  const LOG_PATH      = "orgs/health/data/workout/workout-log.json";
+  const SESSIONS_PATH = "orgs/health/data/workout/workout-sessions.json";
+
+  let mounted = false, week = null, log = [], sessions = {};
+  let root, host, tabEls = [], gearEls = {}, lightbox = null;
+
+  /* ---- helpers straight from the widget ---- */
+  const cleanName = n => String(n).replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  function slug(s) {
+    s = String(s).replace(/\(.*?\)/g, "").trim().toLowerCase();
+    s = s.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return s || "ex";
+  }
+  const entryPath  = (date, dayKey, exName) => `${LOG_DIR}/${date}__${dayKey}__${slug(exName)}.json`;
+  const entryKey   = (date, dayKey, ex) => `${date}|${dayKey}|${ex}`;
+  const sessionKey = (date, dayKey) => `${date}__${dayKey}`;
+  function todayISO() {
+    const d = new Date(); const p = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+  const fmt = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  function parseSeconds(txt) {
+    const t = String(txt || "").trim().toLowerCase();
+    const mm = t.match(/^(\d+):(\d{1,2})$/);
+    if (mm) return parseInt(mm[1], 10) * 60 + parseInt(mm[2], 10);
+    const sec = t.match(/(\d+)\s*(?:s|sec)\b/);
+    if (sec) return parseInt(sec[1], 10);
+    const min = t.match(/(\d+)\s*(?:m|min)\b/);
+    if (min) return parseInt(min[1], 10) * 60;
+    return null;
+  }
+  function beep(freq = 880, ms = 200) {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return;
+      const ac = new Ctx(); const o = ac.createOscillator(); const g = ac.createGain();
+      o.frequency.value = freq; o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(0.18, ac.currentTime); o.start();
+      o.stop(ac.currentTime + ms / 1000); setTimeout(() => ac.close(), ms + 220);
+    } catch (e) {}
+  }
+  const numFrom = s => { const m = String(s || "").match(/-?\d+(?:\.\d+)?/); return m ? m[0] : ""; };
+  const roundLabel = n => `${n} round${n === 1 ? "" : "s"}`;
+
+  const GEARS = [
+    { id: "red", label: "Base" }, { id: "blue", label: "Easy" },
+    { id: "room", label: "Room" }, { id: "blue-r", label: "Lazy" },
+  ];
+  const roundsForGear = g => g === "red" ? 3 : g === "blue" ? 2 : g === "room" ? 1 : 0;
+  function restSecFor(block, indexInBlock = 0) {
+    if (block === "warmup") return 30;
+    if (block === "ss") return indexInBlock === 0 ? 90 : 60;
+    if (block === "finisher") return 60;
+    return null;
+  }
+  const defaultLogMode = block =>
+    (block === "warmup" || block === "cool") ? "none" : block === "ss" ? "full" : "check";
+  function fmtHeaderDate(d) {
+    const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate()}`;
+  }
+  const focusOf = day => (String(day.title || "").split("—")[1] || day.type || "").trim();
+
+  /* ---- state ---- */
+  let DATE = todayISO(), WW = {}, logIndex = new Map();
+  let gear = "red", active = 0;
+  let holdInterval = null, holdBtn = null;
+
+  function historyFor(canon) {
+    return log.filter(e => e.exercise === canon && e.date < DATE && (e.weight || e.reps))
+              .sort((a, b) => a.date.localeCompare(b.date));
+  }
+  const lastLogged = canon => { const h = historyFor(canon); return h.length ? h[h.length - 1] : null; };
+  function resolveMovement(name) {
+    const k = cleanName(name);
+    if (WW[k]) return WW[k];
+    const lower = k.toLowerCase();
+    const hit = Object.keys(WW).find(x => x.toLowerCase() === lower);
+    return hit ? WW[hit] : null;
+  }
+
+  /* ---- saves: append-only entry files, committed through the rails ---- */
+  const pending = new Map(); let saveTimer = null;
+  function queueSave(dayKey, exercise, patch) {
+    const k = entryKey(DATE, dayKey, exercise);
+    const cur = pending.get(k) || { ...(logIndex.get(k) || { done: false, weight: "", reps: "", time: "" }) };
+    pending.set(k, { ...cur, ...patch, _day: dayKey, _ex: exercise, _gear: gear });
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSaves, 600);
+  }
+  async function flushSaves() {
+    saveTimer = null;
+    if (pending.size === 0) return;
+    const batch = new Map(pending);
+    pending.clear();
+    for (const [k, p] of batch) {
+      const exName = p._ex;
+      const entry = {
+        date: DATE, day: p._day, exercise: exName,
+        done: !!p.done, weight: p.weight ?? "", reps: p.reps ?? "", time: p.time ?? "",
+        gear: p._gear || gear,
+      };
+      const fpath = entryPath(DATE, p._day, exName);
+      const empty = !entry.done && !entry.weight && !entry.reps && !entry.time;
+      try {
+        if (empty) {
+          await deleteFile(fpath, `workout: clear ${exName} ${DATE} [site]`);
+          logIndex.delete(k);
+          log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k);
+        } else {
+          await writeRaw(fpath, JSON.stringify(entry, null, 2) + "\n", `workout: log ${exName} ${DATE} [site]`);
+          logIndex.set(k, entry);
+          log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k).concat([entry]);
+        }
+        syncDotFlash(true);
+      } catch (e) {
+        console.warn("[workout] save failed", fpath, e);
+        toast(`Save failed: ${exName} — will need a retry`);
+        syncDotFlash(false);
+      }
+    }
+    /* the PC widget rebuilds workout-log.json (derived cache) from the folder;
+       the site leaves the cache alone — folder entries are the source of truth. */
+  }
+  async function writeSessions() {
+    try {
+      sessions = await saveJSON(SESSIONS_PATH, cur => {
+        const merged = (cur && typeof cur === "object") ? cur : {};
+        /* apply our local truth for today's key only — never clobber other days */
+        for (const key of Object.keys(localSessionTouches)) {
+          if (localSessionTouches[key]) merged[key] = true; else delete merged[key];
+        }
+        return merged;
+      }, `workout: session flags ${DATE} [site]`);
+      syncDotFlash(true);
+    } catch (e) {
+      console.warn("[workout] sessions write failed", e);
+      toast("Session flag save failed");
+      syncDotFlash(false);
+    }
+  }
+  const localSessionTouches = {};
+  function syncDotFlash(ok) {
+    const dot = $("sync-dot");
+    dot.className = ok ? "ok" : "err";
+  }
+
+  /* ---- data load ---- */
+  async function loadAll() {
+    const w = await readFile(WEEK_PATH);
+    if (!w || !w.data || !Array.isArray(w.data.days)) throw new Error(`Could not load ${WEEK_PATH}`);
+    week = w.data; WW = week.working_weights || {};
+    const cache = await readFile(LOG_PATH);
+    log = (cache && Array.isArray(cache.data)) ? cache.data : [];
+    /* today's entry files are fresher than the cache — overlay them */
+    const files = await listDir(LOG_DIR);
+    const todays = files.filter(f => f.name.startsWith(DATE) && f.name.endsWith(".json"));
+    for (const f of todays) {
+      try {
+        const e = await readFile(f.path);
+        shaMap.set(f.path, e.sha);
+        if (e.data && e.data.date && e.data.day && e.data.exercise) {
+          const k = entryKey(e.data.date, e.data.day, e.data.exercise);
+          log = log.filter(x => entryKey(x.date, x.day, x.exercise) !== k).concat([e.data]);
+        }
+      } catch (_) {}
+    }
+    const s = await readFile(SESSIONS_PATH);
+    sessions = (s && s.data && typeof s.data === "object") ? s.data : {};
+    logIndex = new Map();
+    for (const e of log) {
+      if (e && e.date === DATE && e.day && e.exercise) logIndex.set(entryKey(e.date, e.day, e.exercise), e);
+    }
+  }
+
+  /* ---- UI (ported) ---- */
+  function openLightbox(src, alt) {
+    if (!lightbox) {
+      lightbox = el(root, "div", "lightbox");
+      lightbox._img = el(lightbox, "img");
+      lightbox._cap = el(lightbox, "div", "cap");
+      lightbox.onclick = () => lightbox.classList.remove("on");
+    }
+    lightbox._img.src = src; lightbox._img.alt = alt || "";
+    lightbox._cap.textContent = alt || "";
+    lightbox.classList.add("on");
+  }
+
+  function toggleTrend(parent, canon) {
+    const existing = parent.querySelector(".trend");
+    if (existing) { existing.remove(); return; }
+    const pts = historyFor(canon)
+      .map(e => parseFloat(String(e.weight).replace(/[^0-9.]/g, "")))
+      .filter(v => !isNaN(v)).slice(-8);
+    const box = el(parent, "div", "trend");
+    if (pts.length < 2) { el(box, "span", "trendlab", "not enough history yet"); return; }
+    const w = 190, h = 40, pad = 4;
+    const min = Math.min(...pts), max = Math.max(...pts), rng = (max - min) || 1;
+    const X = i => pad + i * (w - 2 * pad) / (pts.length - 1);
+    const Y = v => h - pad - ((v - min) / rng) * (h - 2 * pad);
+    const d = pts.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`); svg.setAttribute("width", w); svg.setAttribute("height", h);
+    const path = document.createElementNS(NS, "path");
+    path.setAttribute("d", d); path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "var(--gold)"); path.setAttribute("stroke-width", "1.5");
+    path.setAttribute("stroke-linejoin", "round"); path.setAttribute("stroke-linecap", "round");
+    svg.appendChild(path); box.appendChild(svg);
+    el(box, "span", "trendlab", `${min}→${max} kg · ${pts.length} logs`);
+  }
+
+  function startHold(dayKey, canon, sec, btn) {
+    if (holdInterval) {
+      clearInterval(holdInterval); holdInterval = null;
+      if (holdBtn) { holdBtn.classList.remove("run"); holdBtn.textContent = holdBtn._idle || ""; }
+    }
+    let rem = sec; holdBtn = btn;
+    btn.classList.add("run"); btn.classList.remove("fin"); btn.textContent = fmt(rem);
+    holdInterval = setInterval(() => {
+      rem -= 1;
+      if (rem <= 0) {
+        clearInterval(holdInterval); holdInterval = null;
+        btn.classList.remove("run"); btn.classList.add("fin");
+        btn._idle = `✓ ${sec}s`; btn.textContent = btn._idle;
+        beep(660, 300);
+        queueSave(dayKey, canon, { time: `${sec}s` });
+      } else { btn.textContent = fmt(rem); }
+    }, 1000);
+  }
+
+  function movementCard(parent, dayKey, item, opts) {
+    const canon = cleanName(item.n);
+    const meta  = resolveMovement(item.n) || {};
+    const mode  = item.log || opts.mode || "check";
+    const saved = logIndex.get(entryKey(DATE, dayKey, canon)) || {};
+
+    const card = el(parent, "div", "mc");
+    const fig = el(card, "div", "mcfig");
+    const imgPath = Array.isArray(meta.form) ? meta.form[0] : meta.form;
+    if (imgPath) {
+      const img = el(fig, "img");
+      img.alt = `${canon} form`; img.loading = "lazy";
+      imageURL(imgPath)
+        .then(u => { img.src = u; img.onclick = () => openLightbox(u, canon); })
+        .catch(() => { fig.textContent = ""; el(fig, "div", "mcph", "form pic"); });
+    } else {
+      el(fig, "div", "mcph", "form pic");
+    }
+
+    const body = el(card, "div", "mcbody");
+    const head = el(body, "div");
+    const kick = el(head, "div", "mckicker");
+    el(kick, "div", "mcrule");
+    el(kick, "span", "mckick", `${opts.section} · ${String(opts.index + 1).padStart(2, "0")}`);
+    el(head, "div", "mcname", item.n);
+
+    const load = item.l || meta.load || "";
+    const reps = item.r || meta.reps || "";
+    const mline = el(head, "div", "mcmeta");
+    if (meta.equipment) el(mline, "span", null, meta.equipment);
+    if (item.rounds) el(mline, "span", "mcrx", roundLabel(item.rounds));
+    const showLoad = load && !/^bodyweight$/i.test(load.trim());
+    const rx = [showLoad ? load : "", reps].filter(Boolean).join(" × ");
+    if (rx) el(mline, "span", "mcrx", rx);
+    if (opts.rest) el(mline, "span", null, `${opts.rest}s rest`);
+
+    if (Array.isArray(meta.cues) && meta.cues.length) {
+      const cw = el(body, "div");
+      el(cw, "div", "mccuet", "Execution cues");
+      const ul = el(cw, "ul", "mccues");
+      meta.cues.forEach((q, i) => {
+        const li = el(ul, "li", "mccue");
+        el(li, "span", "mccuen", String(i + 1).padStart(2, "0"));
+        el(li, "span", null, q);
+      });
+    }
+
+    if (mode === "full") {
+      const last = lastLogged(canon);
+      const ctrl = el(body, "div", "mcctrl");
+      const wf = el(ctrl, "div", "field");
+      el(wf, "span", "fieldlab", "Weight kg");
+      const wIn = el(wf, "input", "inp");
+      wIn.type = "text"; wIn.inputMode = "decimal"; wIn.placeholder = "—";
+      wIn.value = (saved.weight != null && saved.weight !== "") ? saved.weight
+                : (last && last.weight ? last.weight : numFrom(load));
+      const rf = el(ctrl, "div", "field");
+      el(rf, "span", "fieldlab", "Reps");
+      const rIn = el(rf, "input", "inp");
+      rIn.type = "text"; rIn.inputMode = "numeric"; rIn.placeholder = "—";
+      rIn.value = (saved.reps != null && saved.reps !== "") ? saved.reps
+                : (last && last.reps ? last.reps : numFrom(reps));
+      const push = () => queueSave(dayKey, canon, { weight: wIn.value.trim(), reps: rIn.value.trim() });
+      for (const i of [wIn, rIn]) { i.addEventListener("change", push); i.addEventListener("blur", push); }
+      const foot = el(body, "div", "mcfoot");
+      el(foot, "span", null, last ? `Previous log: ${last.weight || "—"}${last.reps ? ` × ${last.reps}` : ""}` : "No previous log");
+      const dots = el(foot, "span", "dots", "· · ·");
+      dots.onclick = () => toggleTrend(body, canon);
+    } else if (mode === "hold") {
+      const sec = parseSeconds(item.r) ?? parseSeconds(meta.reps);
+      const ctrl = el(body, "div", "mcctrl");
+      if (sec) {
+        const btn = el(ctrl, "button", "hold", saved.time ? `✓ ${saved.time}` : `▶ ${sec}s`);
+        btn._idle = btn.textContent;
+        if (saved.time) btn.classList.add("fin");
+        btn.onclick = () => startHold(dayKey, canon, sec, btn);
+      } else {
+        el(ctrl, "span", "trendlab", "timed hold — no duration parsed");
+      }
+    }
+    return card;
+  }
+
+  function movementGrid(parent, dayKey, items, opts) {
+    const grid = el(parent, "div", "grid");
+    (items || []).forEach((it, i) => movementCard(grid, dayKey, it, { ...opts, index: i }));
+    return grid;
+  }
+  function sectionHead(parent, title, meta) {
+    const s = el(parent, "div", "section");
+    const h = el(s, "div", "shead");
+    el(h, "span", "stitle", title);
+    el(h, "div", "srule");
+    if (meta) el(h, "span", "smeta", meta);
+    return s;
+  }
+  function yogaRow(parent, dayKey) {
+    const canon = "Yoga";
+    const box = el(parent, "div", "yoga");
+    const saved = logIndex.get(entryKey(DATE, dayKey, canon)) || {};
+    const tick = el(box, "button", "tick", saved.done ? "✓" : "");
+    tick.dataset.on = saved.done ? "1" : "0";
+    tick.onclick = () => {
+      const on = tick.dataset.on !== "1";
+      tick.dataset.on = on ? "1" : "0"; tick.textContent = on ? "✓" : "";
+      queueSave(dayKey, canon, { done: on });
+    };
+    el(box, "span", "yogatxt", "Yoga / mobility — counts as the day's mobility");
+  }
+  function sessionBar(parent, dayKey) {
+    const bar = el(parent, "div", "sessionbar");
+    const k = sessionKey(DATE, dayKey);
+    const btn = el(bar, "button", "sessionbtn");
+    const paint = () => {
+      const on = !!sessions[k];
+      btn.dataset.on = on ? "1" : "0";
+      btn.textContent = on ? `✓ Session complete · ${DATE}` : "Mark session complete";
+    };
+    paint();
+    btn.onclick = async () => {
+      if (saveTimer) { clearTimeout(saveTimer); await flushSaves(); }
+      const on = !sessions[k];
+      if (on) sessions[k] = true; else delete sessions[k];
+      localSessionTouches[k] = on;
+      paint();
+      await writeSessions();
+      paint();
+    };
+  }
+
+  async function renderDay() {
+    if (holdInterval) { clearInterval(holdInterval); holdInterval = null; holdBtn = null; }
+    if (saveTimer) { clearTimeout(saveTimer); await flushSaves(); }
+    tabEls.forEach((t, i) => t.dataset.on = i === active ? "1" : "0");
+    host.textContent = "";
+
+    const d = week.days[active];
+    const isStrength = d.type === "strength";
+    const rounds = roundsForGear(gear);
+    const showRounds = Math.max(1, rounds);
+
+    if (gear === "blue-r" && isStrength && d.just_move) {
+      const head = el(host, "div", "dhead");
+      el(head, "div", "dtitle", d.just_move.title);
+      el(head, "div", "dtag", "strength day · Lazy — swap the lift for a walk + mobility");
+      const s = sectionHead(host, "Just move", "");
+      const jm = el(s, "div", "jm");
+      (d.just_move.items || []).forEach((it, i) => {
+        const row = el(jm, "div", "jmitem");
+        el(row, "span", "jmn", String(i + 1).padStart(2, "0"));
+        el(row, "span", null, it);
+      });
+      if (d.note) el(host, "div", "note", d.note);
+      sessionBar(host, d.key);
+      return;
+    }
+
+    const room = (gear === "room" && week.room_session) ? week.room_session : null;
+    const src = room || d;
+
+    const head = el(host, "div", "dhead");
+    el(head, "div", "dtitle", room ? room.title : d.title);
+    el(head, "div", "dtag", (room ? room.tag : d.tag) || "");
+
+    if (Array.isArray(src.warmup) && src.warmup.length) {
+      const s = sectionHead(host, "Warm-up", `${restSecFor("warmup")}s between`);
+      movementGrid(s, d.key, src.warmup, { section: "Warm-up", mode: defaultLogMode("warmup") });
+    }
+    if (src.engine) {
+      const s = sectionHead(host, "Engine", "");
+      el(s, "div", "prose", src.engine);
+    }
+    (src.ss || []).forEach((block, bi) => {
+      const r    = room ? (block.rounds ?? showRounds) : showRounds;
+      const rest = room ? (block.rest ?? 60) : restSecFor("ss", bi);
+      const s = sectionHead(host, block.label || `Superset ${bi + 1}`, `${roundLabel(r)} · ${rest}s rest`);
+      movementGrid(s, d.key, block.ex, { section: block.label || "Superset", mode: defaultLogMode("ss"), rest });
+    });
+    if (Array.isArray(src.finisher) && src.finisher.length) {
+      const label = d.type === "engine" && !room ? "Core" : "Finisher";
+      const perItem = (src.finisher || []).some(f => f.rounds);
+      const s = sectionHead(host, label,
+        perItem ? `${restSecFor("finisher")}s rest`
+                : `${roundLabel(showRounds)} · ${restSecFor("finisher")}s rest`);
+      movementGrid(s, d.key, src.finisher, { section: label, mode: defaultLogMode("finisher"), rest: restSecFor("finisher") });
+    }
+    if (Array.isArray(src.cool) && src.cool.length) {
+      const s = sectionHead(host, "Cool-down", "");
+      movementGrid(s, d.key, src.cool, { section: "Cool-down", mode: defaultLogMode("cool") });
+    }
+    yogaRow(host, d.key);
+    const note = room ? room.note : d.note;
+    if (note) el(host, "div", "note", note);
+    sessionBar(host, d.key);
+  }
+
+  async function mount() {
+    if (mounted) return;
+    const container = $("view-workout");
+    container.textContent = "";
+    root = el(container, "div", "wkt");
+    const loading = el(root, "div", "sub", "Loading week from repo…");
+    try {
+      DATE = todayISO();
+      await loadAll();
+    } catch (e) {
+      loading.textContent = `⚠ ${e.message}`;
+      return;
+    }
+    mounted = true;
+    root.textContent = "";
+
+    gear = (() => {
+      try {
+        const s = JSON.parse(localStorage.getItem("wkt-gear") || "null");
+        if (s && s.date === DATE && GEARS.some(g => g.id === s.id)) return s.id;
+      } catch (_) {}
+      return "red";
+    })();
+    active = (() => {
+      const mondayFirst = (new Date().getDay() + 6) % 7;
+      return (mondayFirst >= 0 && mondayFirst < week.days.length) ? mondayFirst : 0;
+    })();
+
+    const hdr = el(root, "div", "hdr");
+    const hleft = el(hdr, "div");
+    el(hleft, "div", "kick", "Renovatio · Codex Corporis");
+    el(hleft, "div", "brand", "Workout");
+    el(hdr, "span", "hdate", fmtHeaderDate(new Date()));
+    el(root, "div", "sub", week.week_label || "");
+
+    if (week.review_due && DATE > week.review_due) {
+      el(root, "div", "stale",
+        `⚠ Plan week ended ${week.review_due} — run /workout-review to roll the week. Cards below still show the old week's plan.`);
+    }
+
+    const tabs = el(root, "div", "tabs");
+    tabEls = [];
+    week.days.forEach((d, i) => {
+      const name = String(d.tab).split(" ")[0];
+      const t = el(tabs, "button", "tab");
+      t.dataset.on = i === active ? "1" : "0";
+      el(t, "div", "tabname", name);
+      el(t, "div", "tabsub", focusOf(d));
+      t.onclick = () => { active = i; renderDay(); };
+      tabEls.push(t);
+    });
+
+    const gutter = el(root, "div", "gutter");
+    el(gutter, "span", "label", "Intensity");
+    const gearBox = el(gutter, "div", "gears");
+    gearEls = {};
+    for (const g of GEARS) {
+      const b = el(gearBox, "button", "gear", g.label);
+      b.dataset.on = g.id === gear ? "1" : "0";
+      b.onclick = () => {
+        gear = g.id;
+        try { localStorage.setItem("wkt-gear", JSON.stringify({ date: DATE, id: gear })); } catch (_) {}
+        for (const id in gearEls) gearEls[id].dataset.on = id === gear ? "1" : "0";
+        renderDay();
+      };
+      gearEls[g.id] = b;
+    }
+
+    host = el(root, "div");
+    renderDay();
+  }
+
+  return { mount };
+})();
 </script>
 </body>
 </html>
