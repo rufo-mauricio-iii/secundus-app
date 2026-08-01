@@ -1216,6 +1216,10 @@ const Home = (() => {
       const th = t.closest('.term-head');
       if (th) { const tb = th.nextElementSibling; tb.classList.toggle('open'); th.querySelector('.tcar').innerHTML = tb.classList.contains('open') ? '&#9660;' : '&#9654;'; return; }
       if (t.closest('#metricsBtn')) { t.closest('#metricsBtn').classList.toggle('on'); root.querySelector('#scoreboard').classList.toggle('open'); return; }
+      if (t.closest('#syncBtn')) {
+        if (window.confirm('Re-enter your GitHub token on this device?')) { localStorage.removeItem('secundus.pat'); location.reload(); }
+        return;
+      }
       const rf = t.closest('.sb-refresh');
       if (rf) { rf.classList.add('spin'); INBOX_FILES = null; renderToday(root).finally(() => setTimeout(() => rf.classList.remove('spin'), 400)); return; }
       const dt = t.closest('.cal-day-toggle');
@@ -1323,8 +1327,10 @@ const Home = (() => {
   </nav>
   <div class="right">
     <button class="toggle-btn" id="metricsBtn">☰ METRICS</button>
-    <span id="sync-label"></span>
-    <span id="sync-dot" title="repo connection"></span>
+    <span class="st" id="syncBtn" title="Repo connection — click to re-enter your token" style="cursor:pointer">
+      <span id="sync-label"></span>
+      <span id="sync-dot"></span>
+    </span>
   </div>
 </div>
 
@@ -1507,7 +1513,36 @@ const Home = (() => {
 
     await loadKanban();
     if (!KDB) {
-      root.innerHTML = '<div class="stub-line" style="padding:20px">shared/kanban.json not found in ' + esc(store.repo) + '.</div>';
+      /* Distinguish the two failures that both surface as 404: a fine-grained
+         token outside its scope 404s the REPO itself, which reads as "file
+         missing" unless you check. Say which one it is, and offer the way out —
+         there was previously no route back to the token screen. */
+      let why, fix;
+      try {
+        const probe = await gh('');
+        if (probe.status === 404 || probe.status === 403) {
+          why = `Your token can’t see <b>${esc(store.repo)}</b>.`;
+          fix = 'On GitHub: Settings → Developer settings → Fine-grained tokens → your token → Repository access → add this repo, with Contents = Read and write. Then re-enter it below.';
+        } else if (!probe.ok) {
+          why = `GitHub returned ${probe.status} for <b>${esc(store.repo)}</b>.`;
+          fix = 'If this persists, the token may be expired — issue a new one and re-enter it below.';
+        } else {
+          why = `Connected to <b>${esc(store.repo)}</b>, but <code>shared/kanban.json</code> isn’t there.`;
+          fix = 'Check the file exists on the default branch.';
+        }
+      } catch (e) {
+        why = 'Could not reach GitHub.';
+        fix = 'Check your connection and try again.';
+      }
+      root.innerHTML =
+        `<div class="seal-panel" style="margin:40px auto;max-width:560px">
+           <div class="seal-glyph">&#9775;</div>
+           <div class="seal-title">Can’t load the board</div>
+           <div class="seal-sub" style="text-transform:none;letter-spacing:0;line-height:1.6;margin-top:10px">${why}<br><br>${fix}</div>
+           <button class="toggle-btn" id="resetToken" style="margin-top:18px">Re-enter token</button>
+         </div>`;
+      const rt = root.querySelector('#resetToken');
+      if (rt) rt.onclick = () => { localStorage.removeItem('secundus.pat'); location.reload(); };
       return;
     }
     mounted = true;
