@@ -421,8 +421,7 @@
     <input id="pat" type="password" placeholder="github_pat_…" autocomplete="off">
     <label class="note-sm">Repo</label>
     <select id="repo-select">
-      <option value="rufo-mauricio-iii/secundus_os">secundus_os (LIVE canon)</option>
-      <option value="rufo-mauricio-iii/secundus-site">secundus-site (build sandbox)</option>
+      <option value="rufo-mauricio-iii/secundus_os">secundus_os (canon)</option>
     </select>
     <button id="connect">Connect</button>
     <p class="note-sm" style="margin-top:12px">Token stays in this device's browser storage only.</p>
@@ -435,6 +434,7 @@
 "use strict";
 /* ======================= rails: the one door to the repo ======================= */
 const API = "https://api.github.com";
+const CANON_REPO = "rufo-mauricio-iii/secundus_os";   // the only data repo
 const store = {
   get pat()  { return localStorage.getItem("secundus.pat") || ""; },
   set pat(v) { localStorage.setItem("secundus.pat", v); },
@@ -3282,6 +3282,10 @@ const Food = (() => {
 })();
 
 /* ---- start ---- */
+/* The build sandbox (secundus-site) was retired into canon on 2026-07-31; its
+   vault copy is frozen at that date. Any device still pointed there gets moved,
+   so nobody reads a stale board. */
+if (store.repo && store.repo !== CANON_REPO) store.repo = CANON_REPO;
 if (store.pat && store.repo) boot();
 </script>
 </body>
