@@ -424,6 +424,7 @@
       <option value="rufo-mauricio-iii/secundus_os">secundus_os (canon)</option>
     </select>
     <button id="connect">Connect</button>
+    <p id="gate-error" hidden style="margin-top:12px;padding:10px 12px;border-left:2px solid var(--bad);background:rgba(200,80,80,.08);font-size:13px;line-height:1.55;color:var(--text)"></p>
     <p class="note-sm" style="margin-top:12px">Token stays in this device's browser storage only.</p>
   </div>
 </section>
@@ -606,11 +607,33 @@ async function boot() {
   $("home-v4-root").hidden = false;
   await Home.mount();
 }
-$("connect").onclick = () => {
+/* Validate at the gate. Accepting a token and only failing two screens later is
+   what made a scope problem feel like "it keeps asking for my token". */
+$("connect").onclick = async () => {
+  const btn = $("connect"), errBox = $("gate-error");
   const pat = $("pat").value.trim();
-  if (!pat) { toast("Paste a token first"); return; }
-  store.pat = pat; store.repo = $("repo-select").value;
-  boot();
+  errBox.hidden = true;
+  if (!pat) { errBox.textContent = "Paste a token first."; errBox.hidden = false; return; }
+  const repo = $("repo-select").value;
+  btn.disabled = true; btn.textContent = "Checking…";
+  try {
+    const res = await fetch(`${API}/repos/${repo}`, {
+      headers: { "Authorization": `Bearer ${pat}`, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+    });
+    if (res.status === 401) throw new Error("That token was rejected — it may be expired or mistyped.");
+    if (res.status === 404 || res.status === 403) throw new Error(
+      `This token cannot see ${repo}. On GitHub: Fine-grained tokens → your token → Repository access → add ${repo.split("/")[1]}, Contents = Read and write. A token that only covers a different repo will fail here.`);
+    if (!res.ok) throw new Error(`GitHub returned ${res.status}. Try again in a moment.`);
+    const meta = await res.json();
+    if (meta.permissions && meta.permissions.push === false)
+      throw new Error(`Token reaches ${repo} but is read-only. Set Contents = Read and write.`);
+    store.pat = pat; store.repo = repo;
+    boot();
+  } catch (e) {
+    errBox.textContent = e.message;
+    errBox.hidden = false;
+    btn.disabled = false; btn.textContent = "Connect";
+  }
 };
 /* auto-start lives at the very bottom of this script — Home/Workout/Food are
    const-declared below and are in the temporal dead zone until then. */
