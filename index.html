@@ -257,29 +257,28 @@
   /* Uniform height. Ragged cards made the grid unreadable — you could not
      compare two recipes without re-finding each number. Fixed height plus a
      fixed spec block puts every value on the same line across the whole grid. */
-  .food .rcard{background:var(--card);border:1px solid var(--bord);border-radius:4px;display:flex;flex-direction:column;overflow:hidden;height:310px}
+  .food .rcard{background:var(--card);border:1px solid var(--bord);border-radius:4px;display:flex;flex-direction:column;overflow:hidden;height:352px;position:relative}
   .food .rcard:hover{border-color:var(--gold-dim)}
   .food .rcbody{padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-height:0;flex:1}
-  .food .rmeta2{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1.6px;text-transform:uppercase;color:var(--dim)}
+  .food .rmeta2{display:flex;align-items:center;gap:8px;min-width:0;padding-right:34px;font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);white-space:nowrap;overflow:hidden}
   .food .rmeta2 .rrole{color:var(--gold)}
   .food .rmeta2 .rcuis{color:var(--faint)}
   .food .rmeta2 .dot{color:var(--faint)}
-  /* spec block — five rows, same labels and same order on every card, so the
-     value column reads straight down the grid. Tabular figures keep the digits
-     on a shared baseline grid. */
-  .food .rspec{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;align-content:start;
-   border-top:1px solid var(--bord);border-bottom:1px solid var(--bord);padding:9px 0}
-  .food .rsrow{display:contents}
+  /* spec block — three rows, same labels and same order on every card. The
+     leader rule carries the eye across; values right-align to one edge, so the
+     column reads straight down the grid instead of card by card. */
+  .food .rspec{display:flex;flex-direction:column;gap:5px}
+  .food .rsrow{display:flex;align-items:baseline;gap:8px;min-width:0}
   .food .rsl{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;
-   color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+   color:var(--faint);white-space:nowrap;flex-shrink:0}
+  .food .rslead{flex:1 1 auto;min-width:8px;border-bottom:1px solid var(--bord);transform:translateY(-3px)}
   .food .rsv{font-family:var(--mono);font-size:var(--fs-meta);color:var(--txt);text-align:right;
-   font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:11ch}
-  .food .rsv.accent{color:var(--gold)}
-  .food .rsv.danger{color:var(--warn)}
+   font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+   min-width:0;flex-shrink:1}
   .food .rtitlebtn{display:block;width:100%;text-align:left;cursor:pointer;color:inherit}
-  /* two lines, then clip — the full name is on the title attribute */
-  .food .rname{font-family:var(--serif);font-size:var(--fs-lead);font-weight:700;line-height:1.25;overflow-wrap:anywhere;
-   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  /* one line, then ellipsis — the full name is on the title attribute */
+  .food .rname{font-family:var(--serif);font-size:var(--fs-lead);font-weight:700;line-height:1.3;
+   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* holds its slot when a recipe has no subtitle, so the spec blocks below
      still start on the same line across the grid */
   .food .rsubt{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;color:var(--dim);margin-top:3px;
@@ -290,7 +289,8 @@
   .food .statv{font-family:var(--mono);font-size:var(--fs-body);font-weight:500;color:var(--txt)}
   .food .statv.gold{color:var(--gold)} .food .statv.warn{color:var(--warn)}
   .food .statl{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
-  .food .rver{font-family:var(--mono);font-size:var(--fs-meta);color:var(--gold);letter-spacing:1px;white-space:nowrap;flex-shrink:0;align-self:center}
+  .food .rver{position:absolute;top:11px;right:13px;z-index:1;font-family:var(--mono);font-size:var(--fs-meta);
+   letter-spacing:1px;color:var(--gold);white-space:nowrap;pointer-events:auto}
   .food .rtags{display:flex;gap:4px;margin-top:auto;overflow:hidden;height:20px;align-items:center}
   .food .rtag{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint);border:1px solid var(--bord);border-radius:var(--radius);padding:2px 6px;white-space:nowrap;flex-shrink:0}
   .food .addwrap{margin-top:auto;border-top:1px solid var(--bord)}
@@ -3125,6 +3125,12 @@ const Food = (() => {
       const fit = targetFit(r, ps);
       const pDanger = !!(fit && fit.cls === "fit-warn" && /protein/.test(fit.text));
       const card = createDiv({ cls: "rcard" });
+      /* version count sits in the corner rather than trailing the meta line,
+         where it read as a third category alongside meal and cuisine */
+      if (r.versions && r.versions.length) {
+        const vb = card.createDiv({ cls: "rver", text: `+${r.versions.length}V` });
+        vb.title = `${r.versions.length} version${r.versions.length > 1 ? "s" : ""} of this recipe`;
+      }
       const body = card.createDiv({ cls: "rcbody" });
       const meta = body.createDiv({ cls: "rmeta2" });
       meta.createSpan({ cls: "rrole", text: mealLabel(r) });
@@ -3132,36 +3138,38 @@ const Food = (() => {
       if (cz) { meta.createSpan({ cls: "dot", text: "·" }); meta.createSpan({ cls: "rcuis", text: cz }); }
       const titleBtn = body.createDiv({ cls: "rtitlebtn" });
       const nameEl = titleBtn.createDiv({ cls: "rname", text: r.name });
-      nameEl.title = r.name;                       // clamped to 2 lines — hover for the rest
+      nameEl.title = r.name;                       // clipped to one line — hover for the rest
       const subEl = titleBtn.createDiv({ cls: "rsubt", text: r.subtitle || "" });
       if (r.subtitle) subEl.title = r.subtitle;
       titleBtn.onclick = () => openModal(r.id);
 
-      /* Spec block. Every card carries the same five rows, in the same order,
-         with the same labels, so the numbers line up down the whole grid — you
-         can read one column instead of hunting each card. Carbs and fat moved
-         to the modal; calories and protein stay because they are the targets. */
+      const mac = body.createDiv({ cls: "statrow" });
+      stat(mac, "kcal", Math.round(ps.cal));
+      stat(mac, "protein", g(ps.p), true, pDanger);
+      stat(mac, "carbs", g(ps.c));
+      stat(mac, "fat", g(ps.f));
+
+      /* Spec block. Same three rows, same labels, same order on every card,
+         with a leader rule carrying the eye across to a value column that is
+         right-aligned to the same edge grid-wide. */
       const spec = body.createDiv({ cls: "rspec" });
-      specRow(spec, "per serving", plateGramsText(r, inPlan ? plan.get(r.id).qtys : null));
-      specRow(spec, "cost", `${money(ps.cost)}`);
-      specRow(spec, "time", r.prep_min ? `${r.prep_min} min` : "—");
-      specRow(spec, "calories", String(Math.round(ps.cal)));
-      specRow(spec, "protein", g(ps.p), pDanger ? "danger" : "accent");
+      specRow(spec, "amount / serving", plateGramsText(r, inPlan ? plan.get(r.id).qtys : null));
+      specRow(spec, "cost / serving", money(ps.cost));
+      specRow(spec, "cooking time", r.prep_min ? `${r.prep_min} min` : "—");
 
       const tg = body.createDiv({ cls: "rtags" });
-      if (r.versions && r.versions.length)
-        tg.createSpan({ cls: "rver", text: `+${r.versions.length} version${r.versions.length > 1 ? "s" : ""}` });
       typeTags(r).forEach(t => tg.createSpan({ cls: "rtag", text: t }));
       tg.title = typeTags(r).join(" · ");
 
       buildAddArea(card.createDiv({ cls: "addwrap" }), r);
       return card;
     }
-    function specRow(parent, label, value, tone) {
+    function specRow(parent, label, value) {
       const row = parent.createDiv({ cls: "rsrow" });
       row.createSpan({ cls: "rsl", text: label });
-      const v = row.createSpan({ cls: "rsv" + (tone ? " " + tone : ""), text: value });
-      v.title = value;                             // right column clips first on narrow cards
+      row.createDiv({ cls: "rslead" });            // leader rule between label and value
+      const v = row.createSpan({ cls: "rsv", text: value });
+      v.title = value;                             // the value clips first on a narrow card
       return row;
     }
 
