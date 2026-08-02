@@ -153,10 +153,32 @@
   .wkt .mcfoot:empty{display:none}
   .wkt .dots{color:var(--gold-dim);letter-spacing:3px;cursor:pointer;user-select:none}
   .wkt .rest{align-self:flex-start;font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:2px;text-transform:uppercase;
-    padding:9px 16px;min-height:38px;background:none;color:var(--dim);border:1px solid var(--hairline);cursor:pointer;border-radius:var(--radius)}
+    padding:9px 16px;min-height:42px;background:none;color:var(--dim);border:1px solid var(--hairline);cursor:pointer;border-radius:var(--radius)}
   .wkt .rest:hover{border-color:var(--gold-dim);color:var(--gold)}
   .wkt .rest.run{color:var(--gold);border-color:var(--gold);background:var(--gold-wash);font-variant-numeric:tabular-nums}
   .wkt .rest.fin{color:var(--done);border-color:var(--ok-line)}
+  /* set bar — round counter and the between-rounds rest are one control, because
+     finishing a round is what starts the rest. Sits under the section head so it
+     reads before the movements it governs. */
+  .wkt .setbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;
+   padding:10px 13px;border:1px solid var(--hairline);border-radius:var(--radius);background:var(--card)}
+  .wkt .setbar[data-resting]{border-color:var(--gold-dim);background:var(--gold-wash)}
+  .wkt .setbar[data-done]{border-color:var(--ok-line)}
+  .wkt .setpips{display:flex;gap:5px;flex-shrink:0}
+  .wkt .setpip{width:22px;height:5px;border-radius:var(--radius-dot);background:var(--hairline)}
+  .wkt .setpip.on{background:var(--gold)}
+  .wkt .setbar[data-done] .setpip.on{background:var(--done)}
+  .wkt .setlbl{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:2px;text-transform:uppercase;
+   color:var(--faint);white-space:nowrap}
+  .wkt .setbar[data-resting] .setlbl{color:var(--gold)}
+  .wkt .setbar[data-done] .setlbl{color:var(--done)}
+  .wkt .setbtn{margin-left:auto;min-height:42px;padding:0 18px;cursor:pointer;
+   font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:2px;text-transform:uppercase;
+   background:transparent;color:var(--dim);border:1px solid var(--hairline);border-radius:var(--radius);
+   font-variant-numeric:tabular-nums;white-space:nowrap}
+  .wkt .setbtn:hover{border-color:var(--gold-dim);color:var(--gold)}
+  .wkt .setbar[data-resting] .setbtn{color:var(--gold);border-color:var(--gold);font-size:var(--fs-lead);letter-spacing:1px}
+  .wkt .setbar[data-done] .setbtn{color:var(--done);border-color:var(--ok-line)}
   .wkt .trend svg{display:block;margin-top:6px}
   .wkt .trendlab{font-family:var(--mono);font-size:var(--fs-meta);color:var(--faint)}
   .wkt .prose{border:1px solid var(--hairline);background:var(--card);padding:16px 20px;font-size:var(--fs-body);line-height:1.65;color:var(--dim);border-radius:4px}
@@ -2137,6 +2159,12 @@ const Workout = (() => {
       clearInterval(holdInterval); holdInterval = null;
       if (holdBtn) { holdBtn.classList.remove("run"); holdBtn.textContent = holdBtn._idle || ""; }
     }
+    /* a hold and a rest are both "the clock" — starting one ends the other */
+    stopAllClocks();
+    claimClock({ stop() {
+      if (holdInterval) { clearInterval(holdInterval); holdInterval = null; }
+      if (holdBtn) { holdBtn.classList.remove("run"); holdBtn.textContent = holdBtn._idle || ""; holdBtn = null; }
+    } });
     let rem = sec; holdBtn = btn;
     btn.classList.add("run"); btn.classList.remove("fin"); btn.textContent = fmt(rem);
     holdInterval = setInterval(() => {
@@ -2145,29 +2173,121 @@ const Workout = (() => {
         clearInterval(holdInterval); holdInterval = null;
         btn.classList.remove("run"); btn.classList.add("fin");
         btn._idle = `✓ ${sec}s`; btn.textContent = btn._idle;
-        beep(660, 300);
+        holdBtn = null; activeClock = null;
+        restOver();
         queueSave(dayKey, canon, { time: `${sec}s` });
       } else { btn.textContent = fmt(rem); }
     }, 1000);
   }
 
-  /* rest between sets — press to run it down, press again to cancel */
-  function restButton(parent, sec) {
+  /* ---- rest clocks ---------------------------------------------------------
+     Two rests matter in this plan and they are not the same thing. Between
+     EXERCISES you pause on one movement before the next (30s in the warm-up,
+     the block rest elsewhere) — that is the per-card button. Between SETS you
+     finish a whole round of a superset and rest before going again — that is
+     the set bar, which also has to know which round you are on.
+
+     Counting down from a deadline rather than decrementing a variable: phone
+     browsers throttle timers in a backgrounded tab, and a naive counter drifts
+     badly while you are actually resting with the screen off. */
+  function countdown(sec, onTick, onDone) {
+    const end = Date.now() + sec * 1000;
+    let iv = null;
+    const tick = () => {
+      const rem = Math.max(0, Math.round((end - Date.now()) / 1000));
+      onTick(rem);
+      if (rem <= 0) { clearInterval(iv); iv = null; onDone(); }
+    };
+    iv = setInterval(tick, 250);
+    tick();
+    return { cancel() { if (iv) { clearInterval(iv); iv = null; } } };
+  }
+  /* one clock at a time. A rest ticking on a card you have scrolled past, while
+     another runs somewhere else, is how you lose the thread of a session. */
+  let activeClock = null;
+  function claimClock(c) { if (activeClock && activeClock !== c) activeClock.stop(false); activeClock = c; }
+  function releaseClock(c) { if (activeClock === c) activeClock = null; }
+  function stopAllClocks() { if (activeClock) { activeClock.stop(false); activeClock = null; } }
+  function restOver() {
+    beep(660, 300);
+    /* the phone is usually face-down on the bench — the buzz is the real signal */
+    if (navigator.vibrate) { try { navigator.vibrate([120, 60, 120]); } catch (e) {} }
+  }
+
+  /* between exercises — press to run it down, press again to cancel */
+  function restButton(parent, sec, label) {
     const b = el(parent, "button", "rest");
-    const idle = `rest ${sec}s`;
+    const idle = label ? `${label} ${sec}s` : `rest ${sec}s`;
     b.textContent = idle;
-    let iv = null, rem = sec;
+    let timer = null;
     const stop = (done) => {
-      clearInterval(iv); iv = null;
+      if (timer) { timer.cancel(); timer = null; }
+      releaseClock(handle);
       b.classList.remove("run"); b.classList.toggle("fin", !!done);
       b.textContent = done ? `✓ ${sec}s` : idle;
     };
+    const handle = { stop };
     b.onclick = () => {
-      if (iv) { stop(false); return; }
-      rem = sec; b.classList.add("run"); b.classList.remove("fin"); b.textContent = fmt(rem);
-      iv = setInterval(() => { rem -= 1; if (rem <= 0) { beep(660, 300); stop(true); } else b.textContent = fmt(rem); }, 1000);
+      if (timer) { stop(false); return; }
+      claimClock(handle);
+      b.classList.add("run"); b.classList.remove("fin");
+      timer = countdown(sec, r => { b.textContent = fmt(r); }, () => { restOver(); stop(true); });
     };
     return b;
+  }
+
+  /* between sets. A round is one pass through the block, so the round counter
+     and the rest are the same control: finishing a round starts the rest.
+     Progress is keyed by day + block so switching tabs and back keeps it. */
+  const roundState = new Map();
+  function setBar(parent, key, total, restSec) {
+    const bar = el(parent, "div", "setbar");
+    const pips = el(bar, "div", "setpips");
+    const lbl  = el(bar, "span", "setlbl");
+    const btn  = el(bar, "button", "setbtn");
+    let timer = null;
+    const doneCount = () => Math.min(total, roundState.get(key) || 0);
+    const paintPips = () => {
+      const n = doneCount();
+      pips.textContent = "";
+      for (let i = 0; i < total; i++) el(pips, "span", "setpip" + (i < n ? " on" : ""));
+    };
+    const paint = () => {
+      const n = doneCount();
+      paintPips();
+      if (timer) return;                        // the resting state paints itself
+      if (n >= total) {
+        bar.dataset.done = "1";
+        lbl.textContent = `${total} of ${total} done`;
+        btn.textContent = "Start over";
+      } else {
+        delete bar.dataset.done;
+        lbl.textContent = `Round ${n + 1} of ${total}`;
+        btn.textContent = restSec ? `Done · rest ${restSec}s` : "Round done";
+      }
+    };
+    const stop = () => {
+      if (timer) { timer.cancel(); timer = null; }
+      releaseClock(handle);
+      delete bar.dataset.resting;
+      paint();
+    };
+    const handle = { stop };
+    btn.onclick = () => {
+      if (timer) { stop(); return; }            // press again to skip the rest
+      const n = doneCount();
+      if (n >= total) { roundState.set(key, 0); paint(); return; }
+      roundState.set(key, n + 1);
+      /* nothing to rest for after the last round — the block is finished */
+      if (n + 1 >= total || !restSec) { paint(); restOver(); return; }
+      claimClock(handle);
+      bar.dataset.resting = "1";
+      paintPips();                              // the round you just finished lights now, not when the rest ends
+      lbl.textContent = "Resting";
+      timer = countdown(restSec, r => { btn.textContent = fmt(r); }, () => { restOver(); stop(); });
+    };
+    paint();
+    return bar;
   }
 
   function movementCard(parent, dayKey, item, opts) {
@@ -2301,6 +2421,9 @@ const Workout = (() => {
   }
 
   async function renderDay() {
+    /* the host is about to be emptied — a clock still ticking on a node that no
+       longer exists would beep at you from nowhere */
+    stopAllClocks();
     if (holdInterval) { clearInterval(holdInterval); holdInterval = null; holdBtn = null; }
     if (saveTimer) { clearTimeout(saveTimer); await flushSaves(); }
     tabEls.forEach((t, i) => t.dataset.on = i === active ? "1" : "0");
@@ -2334,8 +2457,11 @@ const Workout = (() => {
     el(head, "div", "dtitle", room ? room.title : d.title);
 
     if (Array.isArray(src.warmup) && src.warmup.length) {
+      /* the warm-up is one pass, not rounds — the only rest is between
+         movements, and the section head has claimed 30s all along without
+         ever giving you a way to run it */
       const s = sectionHead(host, "Warm-up", `${restSecFor("warmup")}s between`);
-      movementGrid(s, d.key, src.warmup, { section: "Warm-up", mode: defaultLogMode("warmup") });
+      movementGrid(s, d.key, src.warmup, { section: "Warm-up", mode: defaultLogMode("warmup"), rest: restSecFor("warmup") });
     }
     if (src.engine) {
       const s = sectionHead(host, "Engine", "");
@@ -2345,12 +2471,16 @@ const Workout = (() => {
       const r    = room ? (block.rounds ?? showRounds) : showRounds;
       const rest = room ? (block.rest ?? 60) : restSecFor("ss", bi);
       const s = sectionHead(host, block.label || `Superset ${bi + 1}`, roundLabel(r));
+      setBar(s, `${d.key}|${gear}|ss${bi}`, r, rest);
       movementGrid(s, d.key, block.ex, { section: block.label || "Superset", mode: defaultLogMode("ss"), rest });
     });
     if (Array.isArray(src.finisher) && src.finisher.length) {
       const label = d.type === "engine" && !room ? "Core" : "Finisher";
       const perItem = (src.finisher || []).some(f => f.rounds);
       const s = sectionHead(host, label, perItem ? "" : roundLabel(showRounds));
+      /* per-item rounds means each movement carries its own count, so a single
+         block-wide round counter would be lying */
+      if (!perItem) setBar(s, `${d.key}|${gear}|fin`, showRounds, restSecFor("finisher"));
       movementGrid(s, d.key, src.finisher, { section: label, mode: defaultLogMode("finisher"), rest: restSecFor("finisher") });
     }
     if (Array.isArray(src.cool) && src.cool.length) {
