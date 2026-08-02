@@ -1,0 +1,113 @@
+/* ============================================================
+   tokens.css — every custom property in the app, and the only
+   place any of them is declared.
+
+   Before this file the tokens lived in two stylesheets: the ramp
+   and scale in home.css, the Workout/Diet aliases inline in
+   index.html. Two sheets declaring into the same :root means the
+   later one silently wins, which is a bug you can only find by
+   measuring. Single declaration removes the whole category —
+   load order no longer decides anything.
+
+   Loaded first in index.html. Nothing else may declare a custom
+   property; consume them with var() instead.
+   ============================================================ */
+
+:root{
+  /* warmed charcoal — shifts the base off cool-blue to reduce blue-light
+     fatigue over long sessions, while staying "cyber dark" */
+  /* ============================================================
+     ENGRAVED INSTRUMENT — one ink ramp, warm. The purple-tinted
+     surfaces that Workout and Diet used are retired below by
+     aliasing, which is what made the pages feel like two apps.
+     ============================================================ */
+  --ink-0:#12110D; --ink-1:#1A1813; --ink-2:#24211A; --ink-3:#2E2A21;
+  --bg-base:var(--ink-0);
+  --bg-surface:var(--ink-1);
+  --bg-elevated:var(--ink-2);
+  --border:#FFFFFF14;
+  --border-hover:#FFFFFF26;
+  --rule:#FFFFFF1F;
+  --focus-ring:0 0 0 2px #C9A227;
+
+  /* every value below clears 4.5:1 as text on ink-1, ink-2 and ink-3 */
+  --text:#E9E4D9;
+  --text-secondary:#B2AB9D;
+  --text-muted:#9A9286;   /* was #8b8478 — failed AA on every raised surface */
+  --gray:#9A9286;
+
+  /* five roles. Nothing else carries colour. */
+  --gold:#C9A227; --gold-dim:#6B5820; --gold-bg:#C9A2270F;
+  --red:#DD7076; --red-dim:#C0454B; --red-bg:#DD70760F;
+  --bad:#DD7076; --bad-dim:#DD707620;
+  --warn:#E0975A; --warn-dim:#E0975A20;
+  --ok:#5F9E92;  --ok-dim:#5F9E9220;
+  /* crimson-deep: fills, 1px rules and accent bars only — never text */
+  --crimson-deep:#C0454B;
+  /* derived stops so page CSS never carries a raw hex */
+  --gold-hi:#DCB84A;
+  --ok-line:#5F9E9280; --ok-bg:#5F9E921F;
+  --scrim:#0A0A0AF0;
+
+  /* retired — aliased to neutral so no usage breaks, none carry meaning */
+  --purple:var(--gray); --purple-dim:var(--border-hover); --purple-bg:transparent;
+  --teal:var(--ok);     --teal-dim:var(--border-hover);   --teal-bg:transparent;
+  --blue:var(--gray);   --blue-dim:var(--border-hover);
+  --green:var(--ok);    --green-dim:var(--border-hover);
+  /* calendar timeline event chips (D-034) — exact values from the approved
+     "Claude design" export, kept as tokens rather than inlined so the rest of
+     the widget's token-driven convention still holds. */
+  --cal-ev-today-bg:#3a2f10;
+  --cal-ev-today-text:#f3ead0;
+  --cal-ev-future-bg:#ffffff08;
+  --cal-ev-future-text:#b2ab9d;
+  --font-display:'Cinzel',serif;
+  --font-body:'IBM Plex Sans',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',monospace;
+  --radius:4px;          /* every box, no exceptions */
+  --radius-lg:4px;
+  --radius-dot:1px;      /* streak squares */
+  --radius-pip:50%;      /* status pips   */
+  /* spacing named by role — the real numbers the components use */
+  --pad-card:11px 15px; --pad-lane:9px 12px;
+  --gap-card:6px; --gap-block:13px; --gap-section:20px;
+  --gutter:22px; --gutter-sm:14px;
+  /* ============================================================
+     TYPE — the single source of truth for the whole file.
+     Four families, one job each:
+       display : view titles only. Kept scarce on purpose.
+       body    : all content text.
+       mono    : all metadata and numerics.
+       serif   : "voice" only — the daily quote and workout cues.
+     Six sizes. Nothing outside this scale, no raw px.
+     Icons and glyphs are not type and are sized independently.
+     ============================================================ */
+  --font-serif:'Libre Baskerville',Georgia,serif;
+  --fs-meta:11px;     /* labels, tags, counts, timestamps      */
+  --fs-dense:13px;    /* mini-board cards, tight tables        */
+  --fs-body:15px;     /* default — all content text            */
+  --fs-lead:18px;     /* the quote, lead-in lines              */
+  --fs-title:22px;    /* view titles                           */
+  --fs-display:30px;  /* timers and big numerics               */
+
+  /* ---- aliases: the names the Workout and Diet skins were written
+       against, pointed at the ramp above ---- */
+  /* aliases so the Health app skins keep reading the names they were written against */
+  /* these were a second, purple-tinted palette. Aliased to the one
+  ramp above so Workout and Diet stop reading as a different app. */
+  --bg:var(--ink-0); --fg:var(--text); --card:var(--ink-1); --card2:var(--ink-2);
+  --hairline:var(--border); --dim:var(--text-secondary);
+  --faint:var(--text-muted); --cue:var(--text-muted);
+  --gold-wash:var(--gold-bg);
+  --done:var(--ok); --crimson:var(--red);
+  /* aliases — these were a second, independent font stack. They now point
+  at the tokens above so the two halves of the app cannot drift apart. */
+  --serif:var(--font-serif);
+  --body:var(--font-body);
+  --mono:var(--font-mono);
+  --err:var(--bad);
+
+  /* were declared on .food itself — promoted so no rule outside this file
+     declares a custom property at all */
+  --bord:var(--hairline); --txt:var(--fg);
+}
