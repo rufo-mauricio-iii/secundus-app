@@ -34,6 +34,11 @@
   body { min-height:100%; }
   #sync-dot { width:7px; height:7px; border-radius:var(--radius-pip); background:var(--text-muted); flex-shrink:0; }
   #sync-dot.ok { background:var(--ok); } #sync-dot.err { background:var(--bad); }
+  /* the one place motion is allowed: it means a commit is in flight right now */
+  #sync-dot.busy { background:none; border:1.5px solid var(--gold); border-top-color:transparent;
+    width:10px; height:10px; box-sizing:border-box; animation:sync-spin .7s linear infinite; }
+  @keyframes sync-spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion:reduce) { #sync-dot.busy { animation:none; } }
   #sync-label { font-family:var(--font-mono); font-size:var(--fs-meta); color:var(--text-muted); }
   #gate { max-width:420px; margin:8vh auto; padding:0 16px; }
   #gate .card { background:var(--bg-surface); border:1px solid var(--border); border-radius:4px; padding:20px; }
@@ -249,33 +254,45 @@
   .food .libttl{font-family:var(--serif);font-size:var(--fs-dense);letter-spacing:3px;text-transform:uppercase;color:var(--gold)}
   .food .libnum{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;color:var(--faint)}
   .food .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
-  .food .rcard{background:var(--card);border:1px solid var(--bord);border-radius:4px;display:flex;flex-direction:column;overflow:hidden}
+  /* Uniform height. Ragged cards made the grid unreadable — you could not
+     compare two recipes without re-finding each number. Fixed height plus a
+     fixed spec block puts every value on the same line across the whole grid. */
+  .food .rcard{background:var(--card);border:1px solid var(--bord);border-radius:4px;display:flex;flex-direction:column;overflow:hidden;height:310px}
   .food .rcard:hover{border-color:var(--gold-dim)}
-  .food .rcbody{padding:16px;display:flex;flex-direction:column;gap:9px}
+  .food .rcbody{padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-height:0;flex:1}
   .food .rmeta2{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1.6px;text-transform:uppercase;color:var(--dim)}
   .food .rmeta2 .rrole{color:var(--gold)}
   .food .rmeta2 .rcuis{color:var(--faint)}
   .food .rmeta2 .dot{color:var(--faint)}
-  .food .rcostline{display:flex;flex-wrap:wrap;align-items:baseline;gap:7px;font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px}
-  .food .rcostline .rcost{color:var(--done);white-space:nowrap}
-  .food .rcostline .rprep{color:var(--dim)}
-  .food .rcostline .dot{color:var(--faint)}
+  /* spec block — five rows, same labels and same order on every card, so the
+     value column reads straight down the grid. Tabular figures keep the digits
+     on a shared baseline grid. */
+  .food .rspec{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;align-content:start;
+   border-top:1px solid var(--bord);border-bottom:1px solid var(--bord);padding:9px 0}
+  .food .rsrow{display:contents}
+  .food .rsl{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;
+   color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .food .rsv{font-family:var(--mono);font-size:var(--fs-meta);color:var(--txt);text-align:right;
+   font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:11ch}
+  .food .rsv.accent{color:var(--gold)}
+  .food .rsv.danger{color:var(--warn)}
   .food .rtitlebtn{display:block;width:100%;text-align:left;cursor:pointer;color:inherit}
-  .food .rname{font-family:var(--serif);font-size:var(--fs-lead);font-weight:700;line-height:1.25;white-space:normal;overflow-wrap:anywhere}
-  .food .rsubt{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;color:var(--dim);margin-top:3px}
+  /* two lines, then clip — the full name is on the title attribute */
+  .food .rname{font-family:var(--serif);font-size:var(--fs-lead);font-weight:700;line-height:1.25;overflow-wrap:anywhere;
+   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  /* holds its slot when a recipe has no subtitle, so the spec blocks below
+     still start on the same line across the grid */
+  .food .rsubt{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;color:var(--dim);margin-top:3px;
+   min-height:1.4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .food .msubt{font-family:var(--mono);font-size:var(--fs-dense);letter-spacing:1px;color:var(--dim);margin-top:4px}
   .food .statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border-top:1px solid var(--bord);border-bottom:1px solid var(--bord);padding:11px 0}
   .food .stat{display:flex;flex-direction:column;gap:2px}
   .food .statv{font-family:var(--mono);font-size:var(--fs-body);font-weight:500;color:var(--txt)}
   .food .statv.gold{color:var(--gold)} .food .statv.warn{color:var(--warn)}
   .food .statl{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
-  .food .rbadgerow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-  .food .rver{font-family:var(--mono);font-size:var(--fs-meta);color:var(--gold);letter-spacing:1px}
-  .food .rtags{display:flex;flex-wrap:wrap;gap:4px}
-  .food .rtag{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint);border:1px solid var(--bord);border-radius:var(--radius);padding:2px 6px}
-  .food .portrow{border-top:1px solid var(--bord);padding-top:9px;margin-top:2px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:var(--fs-meta);color:var(--dim)}
-  .food .portrow .pn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .food .portrow .pv{color:var(--gold);white-space:nowrap;flex-shrink:0}
+  .food .rver{font-family:var(--mono);font-size:var(--fs-meta);color:var(--gold);letter-spacing:1px;white-space:nowrap;flex-shrink:0;align-self:center}
+  .food .rtags{display:flex;gap:4px;margin-top:auto;overflow:hidden;height:20px;align-items:center}
+  .food .rtag{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint);border:1px solid var(--bord);border-radius:var(--radius);padding:2px 6px;white-space:nowrap;flex-shrink:0}
   .food .addwrap{margin-top:auto;border-top:1px solid var(--bord)}
   .food .radd{width:100%;font-family:var(--mono);font-size:var(--fs-meta);font-weight:500;letter-spacing:1.6px;text-transform:uppercase;
    padding:11px 0;cursor:pointer;text-align:center;color:var(--dim);background:transparent;border:none}
@@ -471,16 +488,27 @@ const store = {
 
 async function gh(path, opts = {}) {
   const url = path ? `${API}/repos/${store.repo}/${path}` : `${API}/repos/${store.repo}`;
-  const res = await fetch(url, {
-    ...opts,
-    headers: {
-      "Authorization": `Bearer ${store.pat}`,
-      "Accept": "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...(opts.headers || {}),
-    },
-  });
-  return res;
+  /* every action in this app is a commit, so the topbar has to say where the
+     commit got to. gh() is the only door to the repo, so it is the only place
+     that needs to know. */
+  const writing = /^(PUT|POST|PATCH|DELETE)$/i.test(opts.method || "GET");
+  if (writing) syncBegin();
+  try {
+    const res = await fetch(url, {
+      ...opts,
+      headers: {
+        "Authorization": `Bearer ${store.pat}`,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(opts.headers || {}),
+      },
+    });
+    if (writing) res.ok ? syncOk() : syncFail();
+    return res;
+  } catch (e) {
+    if (writing) syncFail();
+    throw e;
+  }
 }
 function b64decode(b64) {
   return new TextDecoder().decode(Uint8Array.from(atob(String(b64).replaceAll("\n", "")), c => c.charCodeAt(0)));
@@ -614,16 +642,56 @@ function toast(msg, ms = 2500) {
   const t = $("toast"); t.textContent = msg; t.style.display = "block";
   clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms);
 }
+/* ---- sync status ----------------------------------------------------------
+   One dot could not tell connected from saving from failed, and every action
+   here is a commit. SYNC.inflight counts writes in progress; SYNC.at is when
+   the last one landed. The label re-renders on a timer so "just now" ages. */
+const SYNC = { inflight: 0, at: null, failed: false, connected: false };
+function relTime(ms) {
+  const s = Math.round((Date.now() - ms) / 1000);
+  if (s < 45) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return m + "m ago";
+  const h = Math.round(m / 60);
+  return h < 24 ? h + "h ago" : Math.round(h / 24) + "d ago";
+}
+function paintSync() {
+  const dot = $("sync-dot"), label = $("sync-label"), btn = $("syncBtn");
+  if (!dot || !label) return;
+  dot.classList.remove("ok", "err", "busy");
+  if (SYNC.inflight > 0) {
+    dot.classList.add("busy");
+    label.textContent = "Saving…";
+    if (btn) btn.title = "Committing to the repo";
+  } else if (SYNC.failed) {
+    dot.classList.add("err");
+    label.textContent = "Save failed";
+    if (btn) btn.title = "The last write did not commit — click to re-enter your token";
+  } else if (!SYNC.connected) {
+    label.textContent = "connection failed";
+    dot.classList.add("err");
+    if (btn) btn.title = "Cannot reach the repo — click to re-enter your token";
+  } else {
+    dot.classList.add("ok");
+    label.textContent = SYNC.at ? "Synced " + relTime(SYNC.at)
+                                : (store.repo.split("/")[1] || "Connected");
+    if (btn) btn.title = "Connected to " + store.repo + " — click to re-enter your token";
+  }
+}
+function syncBegin() { SYNC.inflight++; paintSync(); }
+function syncOk()    { SYNC.inflight = Math.max(0, SYNC.inflight - 1); SYNC.at = Date.now(); SYNC.failed = false; paintSync(); }
+function syncFail()  { SYNC.inflight = Math.max(0, SYNC.inflight - 1); SYNC.failed = true; paintSync(); }
+setInterval(() => { if (SYNC.at && SYNC.inflight === 0 && !SYNC.failed) paintSync(); }, 30000);
+
 async function verifyConnection() {
-  const dot = $("sync-dot"), label = $("sync-label");
-  if (!dot) return true;
+  if (!$("sync-dot")) return true;
   try {
     const res = await gh("");
     if (!res.ok) throw new Error(res.status);
-    dot.className = "ok"; label.textContent = store.repo.split("/")[1];
+    SYNC.connected = true; paintSync();
     return true;
   } catch {
-    dot.className = "err"; label.textContent = "connection failed";
+    SYNC.connected = false; paintSync();
     toast("Repo connection failed — check token", 4000);
     return false;
   }
@@ -725,13 +793,12 @@ const Home = (() => {
   async function saveKanban() {
     KDB.updated_at = nowStamp();
     KDB.source = 'secundus-site';
+    /* the topbar pip is painted by gh(); callers own the message, because only
+       they know which change is the one that did not commit */
     try {
       await writeRaw(KANBAN_PATH, JSON.stringify(KDB, null, 2), `kanban: update [site]`);
-      const dot = $('sync-dot'); if (dot) dot.className = 'ok';
     } catch (e) {
       console.error('[home] kanban save failed', e);
-      toast('Board save failed — change not committed', 4000);
-      const dot = $('sync-dot'); if (dot) dot.className = 'err';
       throw e;
     }
   }
@@ -780,6 +847,7 @@ const Home = (() => {
     return { returned, archived };
   }
   function renderKanban(root = ROOT) {
+    if (!KDB) return;              // board failed to load; .k-fail is showing instead
     document.querySelectorAll('.k-ghost').forEach(g => g.remove());
     LANES.forEach(l => {
       const cards = byLane(l);
@@ -789,7 +857,11 @@ const Home = (() => {
         const due = chip
           ? `<span class="kc-due" style="color:${chip.color}">${esc(chip.text)}</span>`
           : (c.urgent ? `<span class="kc-due" style="color:var(--bad)">!</span>` : '');
-        return `<div class="k-card" data-id="${esc(c.id)}" title="Click to edit &middot; drag to move"><div class="kc-title">${esc(c.t)}</div><div class="kc-meta"><span class="kc-tag" style="background:${dc[0]};color:${dc[1]}">${esc(c.d)}</span>${due}</div></div>`;
+        const err = CARD_ERR.get(c.id);
+        const errRow = err
+          ? `<div class="kc-err"><span class="kc-err-t">not saved</span><button class="kc-retry" data-retry="${esc(c.id)}">Retry</button><button class="kc-discard" data-discard="${esc(c.id)}">Discard</button></div>`
+          : '';
+        return `<div class="k-card${err ? ' err' : ''}" data-id="${esc(c.id)}" title="Click to edit &middot; drag to move"><div class="kc-title">${esc(c.t)}</div><div class="kc-meta"><span class="kc-tag" style="background:${dc[0]};color:${dc[1]}">${esc(c.d)}</span>${due}</div>${errRow}</div>`;
       }).join('');
       if (l === 'done') html += `<div class="k-archnote">archived (${KDB.archive.length}) &middot; auto after 7d</div>`;
       root.querySelectorAll(`.k-lane-b[data-lane="${l}"]`).forEach(b => b.innerHTML = html);
@@ -803,53 +875,192 @@ const Home = (() => {
     const bc = root.querySelector('#kBacklogCount'); if (bc) bc.textContent = backlogN;
     return nowN;
   }
-  async function addCard(lane) {
-    const title = window.prompt('New card — title:');
-    if (!title || !title.trim()) return;
-    const t = title.trim();
-    const card = {
-      id: uniqueId(t), t, note: '', d: 'PERS', lane, due: null, urgent: false,
-      ongoing_since: lane === 'ongoing' ? todayISO() : null,
-      returns_after_days: lane === 'ongoing' ? 7 : null,
-      created: todayISO(), doneAt: null,
-    };
-    KDB.cards.push(card);
-    renderAll();                       // optimistic: the board reacts now, commit follows
-    try { await saveKanban(); await appendLog('EDITED', KANBAN_PATH, `added ${card.id}`); }
-    catch (e) { await reloadKanban(); }
-  }
-  async function editCard(id) {
-    const card = KDB.cards.find(c => c.id === id);
-    if (!card) return;
-    const edited = window.prompt('Edit card (clear text + OK to delete):', card.t);
-    if (edited === null) return;
-    const trimmed = edited.trim();
-    if (!trimmed) {
-      if (window.confirm('Delete this card?')) {
-        KDB.cards = KDB.cards.filter(c => c.id !== id);
-        renderAll();
-        try { await saveKanban(); await appendLog('EDITED', KANBAN_PATH, `deleted ${id}`); }
-        catch (e) { await reloadKanban(); }
-      }
-      return;
+  /* ---- writes -------------------------------------------------------------
+     Mutations are optimistic. When the commit fails we used to call
+     reloadKanban(), so the card silently snapped back and you assumed you had
+     mis-dragged. Now the change stays on screen, wearing the failure, with a
+     way to try again and a way to throw it away. */
+  const CARD_ERR = new Map();          // card id -> { what, retry }
+  async function commit(kind, path, note, failMsg, cardId, retry) {
+    try {
+      await saveKanban();
+      await appendLog(kind, path, note);
+      if (cardId) CARD_ERR.delete(cardId);
+      renderAll();
+      return true;
+    } catch (e) {
+      toast(failMsg, 5000);
+      if (cardId) CARD_ERR.set(cardId, { what: failMsg, retry });
+      renderAll();
+      return false;
     }
-    card.t = trimmed;
-    renderAll();
-    try { await saveKanban(); await appendLog('EDITED', KANBAN_PATH, `retitled ${id}`); }
-    catch (e) { await reloadKanban(); }
   }
+  async function retryCard(id) {
+    const entry = CARD_ERR.get(id);
+    if (entry && entry.retry) await entry.retry();
+  }
+  async function discardCard(id) {
+    CARD_ERR.delete(id);
+    await reloadKanban();              // the repo is the truth; drop the local edit
+  }
+
+  /* ---- inline editors -----------------------------------------------------
+     window.prompt is suppressed outright in some mobile browsers, so on a
+     phone adding a card could silently do nothing. Everything is inline now. */
+  function closeEditors() {
+    if (!ROOT) return;
+    ROOT.querySelectorAll('.k-edit').forEach(n => n.remove());
+    ROOT.querySelectorAll('.k-card.editing').forEach(c => c.classList.remove('editing'));
+  }
+  function editorBox(value, placeholder, onCommit, onCancel, onDelete) {
+    const box = document.createElement('div');
+    box.className = 'k-edit';
+    const inp = el(box, 'input', 'k-edit-in');
+    inp.type = 'text'; inp.value = value || ''; inp.placeholder = placeholder;
+    inp.setAttribute('aria-label', placeholder);
+    const row = el(box, 'div', 'k-edit-row');
+    const ok = el(row, 'button', 'k-edit-ok', 'Save');
+    const no = el(row, 'button', 'k-edit-x', 'Cancel');
+    const send = () => { const v = inp.value.trim(); if (!v) { inp.focus(); return; } onCommit(v); };
+    ok.onclick = send;
+    no.onclick = onCancel;
+    if (onDelete) {
+      const del = el(row, 'button', 'k-edit-del', 'Delete');
+      let armed = false;
+      del.onclick = () => {
+        if (!armed) { armed = true; del.textContent = 'Delete — sure?'; del.classList.add('armed'); return; }
+        onDelete();
+      };
+    }
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); send(); }
+      else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+    });
+    return { box, inp };
+  }
+
+  function addCard(lane, laneBody) {
+    closeEditors();
+    const body = laneBody || (ROOT && ROOT.querySelector(`.k-lane-b[data-lane="${lane}"]`));
+    if (!body) return;
+    const { box, inp } = editorBox('', 'New card', async (t) => {
+      box.remove();
+      const card = {
+        id: uniqueId(t), t, note: '', d: 'PERS', lane, due: null, urgent: false,
+        ongoing_since: lane === 'ongoing' ? todayISO() : null,
+        returns_after_days: lane === 'ongoing' ? 7 : null,
+        created: todayISO(), doneAt: null,
+      };
+      KDB.cards.push(card);
+      renderAll();                     // optimistic: the board reacts now, commit follows
+      await commit('EDITED', KANBAN_PATH, `added ${card.id}`,
+        `“${card.t}” was not saved`, card.id, () => commitAdd(card));
+    }, () => box.remove());
+    body.insertBefore(box, body.firstChild);
+    inp.focus();
+  }
+  function commitAdd(card) {
+    return commit('EDITED', KANBAN_PATH, `added ${card.id}`,
+      `“${card.t}” was not saved`, card.id, () => commitAdd(card));
+  }
+
+  function editCard(id, cardEl) {
+    closeEditors();
+    const card = KDB.cards.find(c => c.id === id);
+    const host = cardEl || (ROOT && ROOT.querySelector(`.k-card[data-id="${cssEsc(id)}"]`));
+    if (!card || !host) return;
+    host.classList.add('editing');
+    const done = () => { host.classList.remove('editing'); box.remove(); };
+    const { box, inp } = editorBox(card.t, 'Card title', async (t) => {
+      done();
+      card.t = t;
+      renderAll();
+      await commitRename(card);
+    }, done, async () => {
+      done();
+      KDB.cards = KDB.cards.filter(c => c.id !== id);
+      renderAll();
+      await commit('EDITED', KANBAN_PATH, `deleted ${id}`,
+        `“${card.t}” was not deleted on the repo`, null, null);
+    });
+    host.appendChild(box);
+    inp.focus(); inp.select();
+  }
+  function commitRename(card) {
+    return commit('EDITED', KANBAN_PATH, `retitled ${card.id}`,
+      `The new title for “${card.t}” was not saved`, card.id, () => commitRename(card));
+  }
+  function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
+
   async function moveCard(id, lane) {
     const card = KDB.cards.find(c => c.id === id);
     if (!card || card.lane === lane) return;
+    applyLane(card, lane);
+    renderAll();
+    await commitMove(card, lane);
+  }
+  function applyLane(card, lane) {
     card.lane = lane;
     card.doneAt = lane === 'done' ? todayISO() : null;
     if (lane === 'ongoing') { if (!card.ongoing_since) card.ongoing_since = todayISO(); if (card.returns_after_days == null) card.returns_after_days = 7; }
     else { card.ongoing_since = null; card.returns_after_days = null; }
-    renderAll();
-    try { await saveKanban(); await appendLog('MOVED', KANBAN_PATH, `${id} -> ${lane}`); }
-    catch (e) { await reloadKanban(); }
   }
+  function commitMove(card, lane) {
+    return commit('MOVED', KANBAN_PATH, `${card.id} -> ${lane}`,
+      `The move to ${LANE_NAMES[lane] || lane} was not saved`, card.id, () => commitMove(card, lane));
+  }
+  const LANE_NAMES = { now: 'Now', ongoing: 'In Progress', week: 'This Week', next: 'Next', later: 'Later', done: 'Done' };
   async function reloadKanban() { await loadKanban(); renderAll(); }
+
+  /* ---- board load failure -------------------------------------------------
+     This used to replace the whole page with a full-bleed seal, so one flaky
+     read took out approvals, streaks, the rail and the calendar — all of which
+     had loaded fine. The failure belongs to the board, so it lives in the board. */
+  async function diagnoseBoard() {
+    /* two different failures both surface as 404: a fine-grained token outside
+       its scope 404s the REPO, which reads as "file missing" unless you check */
+    const repo = store.repo || 'the repo';
+    try {
+      const probe = await gh('');
+      if (probe.status === 404 || probe.status === 403)
+        return { why: `Your token can’t see ${repo}.`,
+                 fix: 'On GitHub: Settings → Developer settings → Fine-grained tokens → your token → Repository access → add this repo, with Contents = Read and write.' };
+      if (!probe.ok)
+        return { why: `GitHub returned ${probe.status} for ${repo}.`,
+                 fix: 'If this persists the token may be expired — issue a new one.' };
+      return { why: `Connected to ${repo}, but shared/kanban.json isn’t there.`,
+               fix: 'Check the file exists on the default branch.' };
+    } catch (e) {
+      return { why: 'Could not reach GitHub.', fix: 'Check your connection and try again.' };
+    }
+  }
+  async function showBoardFailure(root) {
+    const { why, fix } = await diagnoseBoard();
+    root.querySelectorAll('.k-row').forEach(row => { row.hidden = true; });
+    root.querySelectorAll('.todo-mini .k-row, #view-todo .k-row').forEach(row => { row.hidden = true; });
+    root.querySelectorAll('.todo-mini, #view-todo .desk-zone').forEach(host => {
+      if (host.querySelector('.k-fail')) return;
+      const box = el(host, 'div', 'k-fail');
+      el(box, 'div', 'k-fail-t', 'Board didn’t load');
+      el(box, 'div', 'k-fail-b', why + ' ' + fix);
+      const row = el(box, 'div', 'k-fail-r');
+      const again = el(row, 'button', null, 'Try again');
+      const tok = el(row, 'button', null, 'Re-enter token');
+      again.onclick = async () => {
+        again.textContent = 'Retrying…'; again.disabled = true;
+        await loadKanban();
+        if (KDB) {
+          root.querySelectorAll('.k-fail').forEach(n => n.remove());
+          root.querySelectorAll('.k-row').forEach(r2 => { r2.hidden = false; });
+          renderAll();
+        } else {
+          again.textContent = 'Try again'; again.disabled = false;
+          toast('Still can’t read the board', 3500);
+        }
+      };
+      tok.onclick = () => { localStorage.removeItem('secundus.pat'); location.reload(); };
+    });
+  }
 
   /* ---- approvals ---- */
   let QUEUE = [];
@@ -893,7 +1104,7 @@ const Home = (() => {
     if (!box) return;
     const seals = staged().length;
     let overdue = 0, dueToday = 0, due7 = 0;
-    for (const c of KDB.cards) {
+    for (const c of (KDB ? KDB.cards : [])) {
       if (c.lane === 'done' || !c.due) continue;
       const delta = -daysSinceISO(c.due);
       if (delta < 0) overdue++;
@@ -997,15 +1208,15 @@ const Home = (() => {
   }
   async function promoteCapture(text) {
     const t = text.replace(/\s*\(\d{2}:\d{2}\)\s*$/, '').trim();
-    if (!t) return;
+    if (!t || !KDB) return;
     const card = {
       id: uniqueId(t), t, note: 'from capture', d: 'PERS', lane: 'now', due: null, urgent: false,
       ongoing_since: null, returns_after_days: null, created: todayISO(), doneAt: null,
     };
     KDB.cards.push(card);
     renderAll();
-    try { await saveKanban(); await appendLog('EDITED', KANBAN_PATH, `promoted capture -> card ${card.id}`); }
-    catch (e) { await reloadKanban(); }
+    await commit('EDITED', KANBAN_PATH, `promoted capture -> card ${card.id}`,
+      `“${card.t}” was promoted but not saved`, card.id, () => commitAdd(card));
   }
   async function renderCapture(root = ROOT) {
     const box = root.querySelector('#capRecent');
@@ -1265,19 +1476,35 @@ const Home = (() => {
 
   function renderAll(root = ROOT) { renderKanban(root); renderApprovals(root); renderScoreboard(root); }
 
+  /* window.confirm for the token reset had the same mobile problem as prompt,
+     and it gave no room to say what the button actually does. */
+  function openTokenReset(root) {
+    const host = root.querySelector('.topbar .right');
+    if (!host) return;
+    const open = host.querySelector('.tok-pop');
+    if (open) { open.remove(); return; }
+    const pop = el(host, 'div', 'tok-pop');
+    el(pop, 'div', 'tok-msg', 'Forget the token stored on this device and enter a new one? Nothing in the repo changes.');
+    const row = el(pop, 'div', 'tok-row');
+    const go = el(row, 'button', 'tok-go', 'Re-enter token');
+    const no = el(row, 'button', 'tok-no', 'Cancel');
+    go.onclick = () => { localStorage.removeItem('secundus.pat'); location.reload(); };
+    no.onclick = () => pop.remove();
+    pop.addEventListener('keydown', e => { if (e.key === 'Escape') pop.remove(); });
+    go.focus();
+  }
+
   function attachListeners(root) {
     root.addEventListener('click', function (e) {
       const t = e.target;
+      if (t.closest('.k-edit')) return;          // clicks inside an editor are its own
       const h = t.closest('.domain-card-h');
       if (h) { const body = h.nextElementSibling, chev = h.querySelector('.chevron'); if (body && body.classList.contains('domain-card-b')) { body.classList.toggle('collapsed'); if (chev) chev.classList.toggle('collapsed'); } return; }
       const ah = t.closest('.appr-head');
       if (ah) { ah.classList.toggle('open'); ah.nextElementSibling.classList.toggle('open'); return; }
       const th = t.closest('.term-head');
       if (th) { const tb = th.nextElementSibling; tb.classList.toggle('open'); th.querySelector('.tcar').innerHTML = tb.classList.contains('open') ? '&#9660;' : '&#9654;'; return; }
-      if (t.closest('#syncBtn')) {
-        if (window.confirm('Re-enter your GitHub token on this device?')) { localStorage.removeItem('secundus.pat'); location.reload(); }
-        return;
-      }
+      if (t.closest('#syncBtn')) { openTokenReset(root); return; }
       const rf = t.closest('.sb-refresh');
       if (rf) { rf.classList.add('spin'); INBOX_FILES = null; renderToday(root).finally(() => setTimeout(() => rf.classList.remove('spin'), 400)); return; }
       const dt = t.closest('.cal-day-toggle');
@@ -1286,7 +1513,17 @@ const Home = (() => {
       if (nb) { showView(root, nb.getAttribute('data-view')); return; }
       if (t.closest('[data-open-board]')) { showView(root, 'todo'); return; }
       const ad = t.closest('.kl-add');
-      if (ad) { addCard(ad.getAttribute('data-lane')); return; }
+      if (ad) {
+        /* open the editor in the lane that was actually clicked — the mini board
+           and the full board share data-lane containers */
+        const laneEl = ad.closest('.k-lane');
+        addCard(ad.getAttribute('data-lane'), laneEl && laneEl.querySelector('.k-lane-b'));
+        return;
+      }
+      const rtry = t.closest('[data-retry]');
+      if (rtry) { retryCard(rtry.getAttribute('data-retry')); return; }
+      const disc = t.closest('[data-discard]');
+      if (disc) { discardCard(disc.getAttribute('data-discard')); return; }
       const approveBtn = t.closest('[data-approve]');
       if (approveBtn) { const id = approveBtn.getAttribute('data-approve'); approveBtn.textContent = '✓ queued'; approveBtn.disabled = true; writeTrigger('approve', id).then(() => loadQueue().then(() => renderApprovals(root))).catch(() => toast('Trigger write failed')); return; }
       const rejectBtn = t.closest('[data-reject]');
@@ -1301,7 +1538,11 @@ const Home = (() => {
       const promote = t.closest('[data-promote]');
       if (promote) { promoteCapture(promote.getAttribute('data-promote')); return; }
       const kcard = t.closest('.k-card');
-      if (kcard) { if (kcard.dataset.dragged) { delete kcard.dataset.dragged; return; } editCard(kcard.getAttribute('data-id')); return; }
+      if (kcard) {
+        if (kcard.dataset.dragged) { delete kcard.dataset.dragged; return; }
+        editCard(kcard.getAttribute('data-id'), kcard);
+        return;
+      }
       if (t.closest('#kDrawer')) {
         const row = root.querySelector('#kBacklogRow');
         row.hidden = !row.hidden;
@@ -1368,6 +1609,9 @@ const Home = (() => {
     }
     root.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
+      /* the editor and the not-saved row live inside the card; typing in them
+         must not start a drag */
+      if (e.target.closest && e.target.closest('.k-edit,.kc-err')) return;
       const c = e.target.closest && e.target.closest('.k-card');
       if (!c) return;
       sweepOrphanGhosts();
@@ -1620,39 +1864,7 @@ const Home = (() => {
     await verifyConnection();
 
     await loadKanban();
-    if (!KDB) {
-      /* Distinguish the two failures that both surface as 404: a fine-grained
-         token outside its scope 404s the REPO itself, which reads as "file
-         missing" unless you check. Say which one it is, and offer the way out —
-         there was previously no route back to the token screen. */
-      let why, fix;
-      try {
-        const probe = await gh('');
-        if (probe.status === 404 || probe.status === 403) {
-          why = `Your token can’t see <b>${esc(store.repo)}</b>.`;
-          fix = 'On GitHub: Settings → Developer settings → Fine-grained tokens → your token → Repository access → add this repo, with Contents = Read and write. Then re-enter it below.';
-        } else if (!probe.ok) {
-          why = `GitHub returned ${probe.status} for <b>${esc(store.repo)}</b>.`;
-          fix = 'If this persists, the token may be expired — issue a new one and re-enter it below.';
-        } else {
-          why = `Connected to <b>${esc(store.repo)}</b>, but <code>shared/kanban.json</code> isn’t there.`;
-          fix = 'Check the file exists on the default branch.';
-        }
-      } catch (e) {
-        why = 'Could not reach GitHub.';
-        fix = 'Check your connection and try again.';
-      }
-      root.innerHTML =
-        `<div class="seal-panel" style="margin:40px auto;max-width:560px">
-           <div class="seal-glyph">&#9775;</div>
-           <div class="seal-title">Can’t load the board</div>
-           <div class="seal-sub" style="text-transform:none;letter-spacing:0;line-height:1.6;margin-top:10px">${why}<br><br>${fix}</div>
-           <button class="toggle-btn" id="resetToken" style="margin-top:18px">Re-enter token</button>
-         </div>`;
-      const rt = root.querySelector('#resetToken');
-      if (rt) rt.onclick = () => { localStorage.removeItem('secundus.pat'); location.reload(); };
-      return;
-    }
+    if (!KDB) await showBoardFailure(root);
     mounted = true;
     await loadQueue();
 
@@ -1662,7 +1874,7 @@ const Home = (() => {
     STREAKS = await readJSON(STREAKS_PATH, {}) || {};
     if (!STREAKS.manual_logs) STREAKS.manual_logs = {};
 
-    const bg = applyBackgroundRules();
+    const bg = KDB ? applyBackgroundRules() : { returned: 0, archived: 0 };
     if (bg.returned || bg.archived) {
       try {
         await saveKanban();
@@ -2673,8 +2885,38 @@ const Food = (() => {
     const spendPanel = sideEl.createDiv({ cls: "panel" });
     const backdrop = wrap.createDiv({ cls: "backdrop" });
     const modal = backdrop.createDiv({ cls: "modal" });
-    backdrop.onclick = (e) => { if (e.target === backdrop) { modalId = null; backdrop.removeClass("on"); } };
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && backdrop.hasClass("on")) { modalId = null; backdrop.removeClass("on"); } });
+    /* The recipe modal is the app's only trapping dialog. Escape closes it,
+       Tab cannot walk out of it, and focus goes back where it came from. */
+    let modalReturnFocus = null;
+    const FOCUSABLE = 'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])';
+    function closeModal() {
+      if (!backdrop.hasClass("on")) return;
+      modalId = null;
+      backdrop.removeClass("on");
+      if (modalReturnFocus) { try { modalReturnFocus.focus(); } catch (e) {} modalReturnFocus = null; }
+    }
+    function openBackdrop() {
+      /* openModal re-runs when you switch recipe version, so only the first
+         open records where focus came from */
+      if (backdrop.hasClass("on")) return;
+      modalReturnFocus = document.activeElement;
+      backdrop.addClass("on");
+      const first = modal.querySelector('.mclose') || modal.querySelector(FOCUSABLE);
+      if (first) first.focus();
+    }
+    backdrop.onclick = (e) => { if (e.target === backdrop) closeModal(); };
+    backdrop.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const items = [...modal.querySelectorAll(FOCUSABLE)].filter(n => n.offsetParent !== null && !n.disabled);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
     const ALL_CUISINES = [...new Set(RECIPES.flatMap(cuisineTags))].sort();
     const ALL_MEALS = MEAL_ORDER.filter(m => RECIPES.some(r => mealLabel(r) === m));
@@ -2889,31 +3131,38 @@ const Food = (() => {
       const cz = cuisineTags(r)[0];
       if (cz) { meta.createSpan({ cls: "dot", text: "·" }); meta.createSpan({ cls: "rcuis", text: cz }); }
       const titleBtn = body.createDiv({ cls: "rtitlebtn" });
-      titleBtn.createDiv({ cls: "rname", text: r.name });
-      if (r.subtitle) titleBtn.createDiv({ cls: "rsubt", text: r.subtitle });
+      const nameEl = titleBtn.createDiv({ cls: "rname", text: r.name });
+      nameEl.title = r.name;                       // clamped to 2 lines — hover for the rest
+      const subEl = titleBtn.createDiv({ cls: "rsubt", text: r.subtitle || "" });
+      if (r.subtitle) subEl.title = r.subtitle;
       titleBtn.onclick = () => openModal(r.id);
-      const mac = body.createDiv({ cls: "statrow" });
-      stat(mac, "kcal", Math.round(ps.cal));
-      stat(mac, "protein", g(ps.p), true, pDanger);
-      stat(mac, "carbs", g(ps.c));
-      stat(mac, "fat", g(ps.f));
-      const cost = body.createDiv({ cls: "rcostline" });
-      cost.createSpan({ cls: "rcost", text: `${money(ps.cost)} / serving` });
-      if (r.prep_min) { cost.createSpan({ cls: "dot", text: "·" }); cost.createSpan({ cls: "rprep", text: `${r.prep_min} min` }); }
-      if (r.versions && r.versions.length) {
-        const brow = body.createDiv({ cls: "rbadgerow" });
-        brow.createDiv({ cls: "rver", text: `+${r.versions.length} version${r.versions.length > 1 ? "s" : ""}` });
-      }
-      const cardTypes = typeTags(r);
-      if (cardTypes.length) {
-        const tg = body.createDiv({ cls: "rtags" });
-        cardTypes.forEach(t => tg.createSpan({ cls: "rtag", text: t }));
-      }
-      const wrow = body.createDiv({ cls: "portrow" });
-      wrow.createSpan({ cls: "pn", text: "per serving" });
-      wrow.createSpan({ cls: "pv", text: plateGramsText(r, inPlan ? plan.get(r.id).qtys : null) });
+
+      /* Spec block. Every card carries the same five rows, in the same order,
+         with the same labels, so the numbers line up down the whole grid — you
+         can read one column instead of hunting each card. Carbs and fat moved
+         to the modal; calories and protein stay because they are the targets. */
+      const spec = body.createDiv({ cls: "rspec" });
+      specRow(spec, "per serving", plateGramsText(r, inPlan ? plan.get(r.id).qtys : null));
+      specRow(spec, "cost", `${money(ps.cost)}`);
+      specRow(spec, "time", r.prep_min ? `${r.prep_min} min` : "—");
+      specRow(spec, "calories", String(Math.round(ps.cal)));
+      specRow(spec, "protein", g(ps.p), pDanger ? "danger" : "accent");
+
+      const tg = body.createDiv({ cls: "rtags" });
+      if (r.versions && r.versions.length)
+        tg.createSpan({ cls: "rver", text: `+${r.versions.length} version${r.versions.length > 1 ? "s" : ""}` });
+      typeTags(r).forEach(t => tg.createSpan({ cls: "rtag", text: t }));
+      tg.title = typeTags(r).join(" · ");
+
       buildAddArea(card.createDiv({ cls: "addwrap" }), r);
       return card;
+    }
+    function specRow(parent, label, value, tone) {
+      const row = parent.createDiv({ cls: "rsrow" });
+      row.createSpan({ cls: "rsl", text: label });
+      const v = row.createSpan({ cls: "rsv" + (tone ? " " + tone : ""), text: value });
+      v.title = value;                             // right column clips first on narrow cards
+      return row;
     }
 
     function renderLibrary() {
@@ -2955,7 +3204,7 @@ const Food = (() => {
       const prepMin = (ver && ver.prep_min) || r.prep_min;
       if (prepMin) { meta.createSpan({ cls: "dot", text: " · " }); meta.createSpan({ text: `~${prepMin} min` }); }
       const close = mh.createEl("button", { cls: "mclose", text: "close" });
-      close.onclick = () => { modalId = null; backdrop.removeClass("on"); };
+      close.onclick = () => closeModal();
 
       if (r.versions && r.versions.length) {
         const vt = modal.createDiv({ cls: "vertoggle" });
@@ -3088,7 +3337,7 @@ const Food = (() => {
         }
         openModal(id, verId); renderAfterPlan();
       };
-      backdrop.addClass("on");
+      openBackdrop();
     }
 
     function renderPlan() {
