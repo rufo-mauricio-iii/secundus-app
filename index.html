@@ -118,6 +118,24 @@ async function writeRaw(path, text, message) {
   }
   throw new Error(`write conflict persisted on ${path}`);
 }
+/* shared/actions.log is the repo's audit trail and /verify reads it. appendLog
+   lived inside the Home IIFE, so Workout and Diet could not reach it; hoisted
+   here beside the other rails. Fire-and-forget: a logging failure must never
+   take down the write it is describing. */
+const ACTIONS_LOG = "shared/actions.log";
+function logStamp() {
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}Z`;
+}
+async function appendActionLog(verb, target, note) {
+  const line = `${logStamp()} | site | ${verb} | ${target} | ok${note ? ' (' + note + ')' : ''} | ${target}\n`;
+  try {
+    const cur = await readFile(ACTIONS_LOG);
+    const body = (cur && typeof cur.data === 'string' ? cur.data : (cur ? cur.raw : '')) || '';
+    await writeRaw(ACTIONS_LOG, body + line, `log: ${verb} ${target} [site]`);
+  } catch (e) { console.warn('[site] appendActionLog failed', e); }
+}
+
 async function deleteFile(path, message) {
   if (!shaMap.has(path)) {
     const cur = await readFile(path);
@@ -334,14 +352,7 @@ const Home = (() => {
   /* actions.log is append-only and 200KB+; appending via the Contents API means
      rewriting the whole blob. Batched: one append per mutation, fire-and-forget,
      never blocking the UI, and failures are logged not surfaced. */
-  async function appendLog(verb, target, note) {
-    const line = `${nowStamp()} | site | ${verb} | ${target} | ok${note ? ' (' + note + ')' : ''} | ${target}\n`;
-    try {
-      const cur = await readFile(LOG_PATH);
-      const body = (cur && typeof cur.data === 'string' ? cur.data : (cur ? cur.raw : '')) || '';
-      await writeRaw(LOG_PATH, body + line, `log: ${verb} ${target} [site]`);
-    } catch (e) { console.warn('[home] appendLog failed', e); }
-  }
+  const appendLog = (verb, target, note) => appendActionLog(verb, target, note);
   function esc(s) { const d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
 
   /* ---- kanban engine (verbatim logic) ---- */
@@ -1469,6 +1480,347 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
 }
 
 /* ====================================================================
+   WEIGHT — bodyweight card, mounted at the top of Workout and Diet.
+   Shape: orgs/builder/shaping/workout-weight-tracking.md (D-1..D-4).
+   One module, two mounts, one file. Entries may be missing by design:
+   Rufo weighs daily or weekly and switches between them, so nothing
+   here may assume even spacing.
+   ==================================================================== */
+const Weight = (() => {
+  const PATH     = "orgs/health/data/weight-log.json";
+  const WIN_KEY  = "secundus.weight.win";      /* range choice, shared by both mounts */
+  const PEND_KEY = "secundus.weight.pending";  /* a write that did not reach the repo */
+  const DAY = 864e5;
+  const MIN_LBS = 100, MAX_LBS = 400;   /* typo guard — see fit(), it is not robust */
+  const DEV_LBS = 5;                    /* ask before accepting a big jump */
+  const MIN_N = 3, MIN_SPAN = 10;       /* below this we do not claim a rate */
+
+  /* noon UTC keeps a plain YYYY-MM-DD free of timezone drift when parsed */
+  const T = d => Date.parse(d + "T12:00:00Z");
+  function todayISO() {
+    const d = new Date(), p = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+  const fmtShort = d => new Date(T(d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const fmtDay   = d => new Date(T(d)).toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).toUpperCase();
+  const sign = v => (v > 0 ? "+" : "−") + Math.abs(v).toFixed(1);
+
+  let doc = null, loading = null;
+  const views = [];
+
+  const rows = () => (doc && Array.isArray(doc.entries) ? doc.entries : [])
+    .filter(e => e && typeof e.date === "string" && typeof e.lbs === "number" && isFinite(e.lbs))
+    .map(e => ({ date: e.date, lbs: e.lbs, t: T(e.date) }))
+    .filter(e => isFinite(e.t))
+    .sort((a, b) => a.t - b.t);
+
+  /* Least squares of lbs against DAYS. Irregular sampling is native to it,
+     which is the whole reason it answers "entries may be missing". */
+  function fit(es) {
+    const n = es.length; if (n < 2) return null;
+    const t0 = es[0].t; let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (const e of es) { const x = (e.t - t0) / DAY, y = e.lbs; sx += x; sy += y; sxx += x * x; sxy += x * y; }
+    const den = n * sxx - sx * sx; if (!den) return null;
+    const b = (n * sxy - sx * sy) / den;
+    return { b, a: (sy - b * sx) / n, t0 };
+  }
+  const spanDays = es => es.length < 2 ? 0 : (es[es.length - 1].t - es[0].t) / DAY;
+
+  /* trailing 7 DAYS, not the last 7 entries — the latter spans a week at daily
+     cadence and seven weeks at Mondays-only */
+  function headline(es, endT) {
+    if (!es.length) return null;
+    const end = endT != null ? endT : es[es.length - 1].t;
+    const win = es.filter(e => e.t <= end && end - e.t <= 7 * DAY);
+    const use = win.length ? win : [es[es.length - 1]];
+    return use.reduce((s, e) => s + e.lbs, 0) / use.length;
+  }
+  /* the guard: a slope through two readings is just the line between them */
+  function readout(es, endT) {
+    if (!es.length) return { kind: "empty" };
+    const avg = headline(es, endT);
+    if (es.length >= MIN_N && spanDays(es) >= MIN_SPAN) return { kind: "rate", avg, wk: fit(es).b * 7 };
+    return { kind: "delta", avg, delta: es[es.length - 1].lbs - es[0].lbs, days: spanDays(es) };
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+  const sv = (p, n, at) => { const e = document.createElementNS(NS, n);
+    for (const k in at) e.setAttribute(k, at[k]); p.appendChild(e); return e; };
+
+  /* X is the calendar date, never the entry index: toggleTrend() below maps by
+     index, which is right for lift history and wrong here — it would give a
+     six-week gap and a one-day gap the same width. */
+  function chart(es, h, cursorT) {
+    const w = 640, pL = 3, pR = 3, pT = 8, pB = 5;
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    svg.setAttribute("width", "100%"); svg.setAttribute("height", h);
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("role", "img");
+    svg.style.display = "block";
+    if (es.length < 2) return svg;
+    svg.setAttribute("aria-label",
+      `Body weight ${es[0].date} to ${es[es.length - 1].date}, ${es[0].lbs} to ${es[es.length - 1].lbs} pounds`);
+
+    const lo = Math.min(...es.map(e => e.lbs)), hi = Math.max(...es.map(e => e.lbs));
+    const pad = Math.max((hi - lo) * 0.18, 0.5), y0 = lo - pad, y1 = hi + pad;
+    const Y = v => h - pB - ((v - y0) / (y1 - y0)) * (h - pT - pB);
+    const t0 = es[0].t, tLast = es[es.length - 1].t;
+    /* extend to the cursor day so an unlogged today reads AS a gap instead of
+       drawing the marker off the edge */
+    const t1 = (cursorT != null) ? Math.max(tLast, cursorT) : tLast;
+    const tr = (t1 - t0) || 1;
+    const X = e => pL + ((e.t - t0) / tr) * (w - pL - pR);
+
+    for (const v of [y1 - pad, y0 + pad])
+      sv(svg, "line", { x1: 0, x2: w, y1: Y(v), y2: Y(v), stroke: "#FFFFFF14", "stroke-width": 1 });
+
+    sv(svg, "path", { d: es.map((e, i) => `${i ? "L" : "M"}${X(e).toFixed(1)},${Y(e.lbs).toFixed(1)}`).join(" "),
+      fill: "none", stroke: "#9A9286", "stroke-width": 1, "stroke-opacity": .34,
+      "stroke-linejoin": "round", "stroke-linecap": "round" });
+    es.forEach(e => sv(svg, "circle", { cx: X(e).toFixed(1), cy: Y(e.lbs).toFixed(1), r: 1.6,
+      fill: "#9A9286", "fill-opacity": .55 }));
+
+    const f = fit(es);
+    if (f) {
+      const at = t => f.a + f.b * ((t - f.t0) / DAY);
+      const ax = X(es[0]), bx = X(es[es.length - 1]);
+      const ay = Y(at(t0)), by = Y(at(tLast));
+      sv(svg, "path", { d: `M${ax},${ay} L${bx},${by} L${bx},${h} L${ax},${h} Z`, fill: "#C9A227", "fill-opacity": .07 });
+      sv(svg, "path", { d: `M${ax},${ay} L${bx},${by}`, fill: "none", stroke: "#C9A227",
+        "stroke-width": 1.6, "stroke-linecap": "round" });
+    }
+    if (cursorT != null) {
+      const cx = pL + ((cursorT - t0) / tr) * (w - pL - pR);
+      sv(svg, "line", { x1: cx, x2: cx, y1: 0, y2: h, stroke: "#C9A227", "stroke-width": 1, "stroke-opacity": .38 });
+      const hit = es.find(e => e.t === cursorT);
+      if (hit) {
+        sv(svg, "circle", { cx, cy: Y(hit.lbs), r: 5, fill: "#C9A227", "fill-opacity": .18 });
+        sv(svg, "circle", { cx, cy: Y(hit.lbs), r: 2.4, fill: "#DCB84A" });
+      }
+    }
+    return svg;
+  }
+
+  /* ---- storage ---- */
+  const readPending = () => { try { return JSON.parse(localStorage.getItem(PEND_KEY) || "null"); } catch (_) { return null; } };
+  const writePending = p => { try { p ? localStorage.setItem(PEND_KEY, JSON.stringify(p)) : localStorage.removeItem(PEND_KEY); } catch (_) {} };
+
+  function upsert(date, lbs) {
+    const arr = doc.entries;
+    const i = arr.findIndex(e => e && e.date === date);
+    if (i >= 0) arr[i].lbs = lbs; else arr.push({ date, lbs });
+    arr.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }
+  async function push(msg) {
+    doc.updated = todayISO();
+    await writeRaw(PATH, JSON.stringify(doc, null, 2) + "\n", msg);
+  }
+  /* A failed write must not look like a saved one. The value is held on the
+     device, the card says "not synced", and the next mount retries. */
+  async function save(date, lbs) {
+    upsert(date, lbs); render();
+    try {
+      await push(`weight: log ${lbs} lbs ${date} [site]`);
+      writePending(null);
+      appendActionLog("WROTE", PATH, `${lbs} lbs ${date}`);
+    } catch (e) {
+      writePending({ date, lbs });
+      toast("Saved on this device — not synced yet");
+    }
+    render();
+  }
+  async function remove(date) {
+    doc.entries = doc.entries.filter(e => !(e && e.date === date)); render();
+    try {
+      await push(`weight: remove ${date} [site]`);
+      appendActionLog("DELETED", PATH, date);
+    } catch (e) { toast("Delete did not reach the repo"); }
+    render();
+  }
+  async function flushPending() {
+    const p = readPending();
+    if (!p || !doc) return;
+    upsert(p.date, p.lbs);
+    try {
+      await push(`weight: log ${p.lbs} lbs ${p.date} [site, retried]`);
+      writePending(null);
+      appendActionLog("WROTE", PATH, `${p.lbs} lbs ${p.date} (retried)`);
+    } catch (e) { /* stays pending; the card keeps saying so */ }
+  }
+  async function load() {
+    if (doc) return doc;
+    if (loading) return loading;
+    loading = (async () => {
+      let f = null;
+      try { f = await readFile(PATH); } catch (e) { f = null; }
+      doc = (f && f.data && typeof f.data === "object" && Array.isArray(f.data.entries))
+        ? f.data : { schema_version: 1, unit: "lbs", entries: [] };
+      await flushPending();
+      return doc;
+    })();
+    return loading;
+  }
+
+  const getWin = () => { const v = parseInt(localStorage.getItem(WIN_KEY) || "90", 10); return [14, 90, 0].includes(v) ? v : 90; };
+  const setWin = v => { try { localStorage.setItem(WIN_KEY, String(v)); } catch (_) {} };
+  function render() { views.forEach(v => { try { v(); } catch (_) {} }); }
+
+  /* ---- one card ---- */
+  function build(host, chartH) {
+    const card = el(host, "div", "wcard");
+    const head = el(card, "div", "whead");
+    const step = el(head, "div", "wstep");
+    const prev = el(step, "button", "warw", "‹"); prev.type = "button"; prev.setAttribute("aria-label", "Previous reading");
+    /* The arrows only visit days that HAVE readings, so on their own they can
+       never reach a blank day — and reaching a blank day IS the backfill path
+       (shaping D-4 / rabbit hole 5). A native date input, transparent over the
+       label, gives every date including empty ones for free: real picker on
+       phone, keyboard-accessible, no custom calendar to build or maintain. */
+    const dayWrap = el(step, "span", "wdaywrap");
+    const dayBtn = el(dayWrap, "span", "wday");
+    const dayIn = el(dayWrap, "input", "wdate");
+    dayIn.type = "date"; dayIn.setAttribute("aria-label", "Pick a date to log or edit");
+    const next = el(step, "button", "warw", "›"); next.type = "button"; next.setAttribute("aria-label", "Next reading");
+    const val  = el(head, "div", "wval");
+    const info = el(head, "div", "winfo");
+    const range = el(head, "div", "wrange");
+    const msg  = el(card, "div", "wmsg");
+    const chartHost = el(card, "div", "wchart");
+
+    const TODAY = todayISO();
+    let cursor = TODAY, win = getWin();
+    let editing = false, draft = "", err = "", confirmVal = null, wantFocus = false;
+
+    const rangeBtns = [["14d", 14], ["90d", 90], ["All", 0]].map(([lab, v]) => {
+      const b = el(range, "button", "wrbtn", lab); b.type = "button";
+      b.onclick = () => { win = v; setWin(v); render(); };
+      return { b, v };
+    });
+
+    function beginEdit() {
+      const on = rows().find(e => e.date === cursor);
+      editing = true; draft = on ? String(on.lbs) : ""; err = ""; confirmVal = null; wantFocus = true; paint();
+    }
+    function cancelEdit() { editing = false; err = ""; confirmVal = null; paint(); }
+    function commit(force) {
+      const es = rows();
+      const v = parseFloat(String(draft).trim());
+      if (!isFinite(v)) { err = "Enter a number, e.g. 207.2"; confirmVal = null; paint(); return; }
+      if (v < MIN_LBS || v > MAX_LBS) {
+        err = v.toFixed(1) + " is outside " + MIN_LBS + "–" + MAX_LBS + " lbs — check the number";
+        confirmVal = null; paint(); return;
+      }
+      const others = es.filter(e => e.date !== cursor);
+      const ref = others.length ? headline(others, T(cursor)) : null;
+      if (!force && ref != null && Math.abs(v - ref) > DEV_LBS) { confirmVal = v; err = ""; paint(); return; }
+      editing = false; err = ""; confirmVal = null;
+      save(cursor, Math.round(v * 10) / 10);
+    }
+
+    function paint() {
+      const es = rows(), cT = T(cursor);
+      const before = es.filter(e => e.t < cT), after = es.filter(e => e.t > cT);
+      prev.disabled = !before.length; next.disabled = !after.length;
+      /* arrows move between days that HAVE readings: at weekly cadence, one
+         calendar day per tap is six dead taps between Mondays */
+      prev.onclick = () => { if (before.length) { cursor = before[before.length - 1].date; editing = false; paint(); } };
+      next.onclick = () => { if (after.length) { cursor = after[0].date; editing = false; paint(); } };
+      dayBtn.textContent = cursor === TODAY ? "TODAY · " + fmtShort(cursor).toUpperCase() : fmtDay(cursor);
+      dayBtn.dataset.today = cursor === TODAY ? "1" : "0";
+      dayBtn.title = "Pick any day — including one with no reading yet";
+      dayIn.value = cursor; dayIn.max = TODAY;   /* no weighing in the future */
+      dayIn.onchange = () => { if (dayIn.value) { cursor = dayIn.value; editing = false; err = ""; confirmVal = null; paint(); } };
+
+      rangeBtns.forEach(r => r.b.dataset.on = r.v === win ? "1" : "0");
+      const view = win === 0 ? es : es.filter(e => T(TODAY) - e.t <= win * DAY);
+      const upto = es.filter(e => e.t <= cT);
+      const onDay = es.find(e => e.date === cursor);
+      const r = readout(upto.length ? upto : es, cT);
+      const pend = readPending();
+
+      val.textContent = ""; info.textContent = ""; msg.textContent = "";
+      const oldActs = head.querySelector(".wacts"); if (oldActs) oldActs.remove();
+
+      if (editing) {
+        range.style.display = "none";
+        const inp = document.createElement("input");
+        inp.className = "winput"; inp.value = draft; inp.setAttribute("inputmode", "decimal");
+        inp.setAttribute("aria-label", "Weight in pounds for " + cursor);
+        inp.placeholder = "207.2";
+        inp.oninput = e => { draft = e.target.value; };
+        inp.onkeydown = e => {
+          if (e.key === "Enter") { e.preventDefault(); commit(confirmVal != null); }
+          if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+        };
+        val.appendChild(inp);
+        el(val, "span", "wunit", "lbs");
+        const acts = el(head, "div", "wacts");
+        const sb = el(acts, "button", "wact primary", "Save"); sb.type = "button"; sb.onclick = () => commit(confirmVal != null);
+        const cb = el(acts, "button", "wact", "Cancel"); cb.type = "button"; cb.onclick = cancelEdit;
+        if (onDay) { const db = el(acts, "button", "wact danger", "Delete"); db.type = "button";
+          db.onclick = () => { editing = false; remove(cursor); }; }
+
+        if (err) el(msg, "div", "werr", err);
+        else if (confirmVal != null) {
+          const others = es.filter(e => e.date !== cursor);
+          const ref = headline(others, cT);
+          const cf = el(msg, "div", "wconfirm");
+          el(cf, "span", null, confirmVal.toFixed(1) + " is " + Math.abs(confirmVal - ref).toFixed(1)
+            + " lbs off your recent average. Save anyway?");
+          const y = el(cf, "button", "wact primary", "Save it"); y.type = "button"; y.onclick = () => commit(true);
+        } else el(msg, "div", "whint", "Enter saves · Esc cancels");
+
+      } else {
+        range.style.display = "";
+        if (!onDay) {
+          const b = el(val, "button", "wslot"); b.type = "button";
+          b.textContent = cursor === TODAY ? "Log this morning" : "Add " + fmtShort(cursor);
+          b.onclick = beginEdit;
+          const near = upto[upto.length - 1];
+          el(info, "span", "wmeta", near ? "last " + near.lbs.toFixed(1) + " · " + fmtShort(near.date) : "no readings yet");
+        } else {
+          /* the number IS the control, so logging, correcting and backfilling
+             are one gesture rather than three features */
+          const mb = el(val, "button", "wmoney"); mb.type = "button";
+          mb.setAttribute("aria-label", "Edit weight for " + cursor);
+          el(mb, "span", "wnum", onDay.lbs.toFixed(1));
+          el(mb, "span", "wunit", "lbs");
+          el(mb, "span", "wpencil", "edit");
+          mb.onclick = beginEdit;
+          if (r.kind === "rate") {
+            const q = el(info, "span", "wrate", sign(r.wk) + " lbs/wk");
+            q.dataset.dir = r.wk < -0.05 ? "down" : r.wk > 0.05 ? "up" : "none";
+          } else if (r.kind === "delta" && es.length > 1) {
+            const q = el(info, "span", "wrate", sign(r.delta) + " in " + Math.round(r.days) + "d");
+            q.dataset.dir = r.delta < 0 ? "down" : "none";
+          }
+          if (info.childNodes.length) el(info, "span", "wsep", "·");
+          el(info, "span", "wmeta", "avg " + r.avg.toFixed(1));
+          if (cursor !== TODAY) { el(info, "span", "wsep", "·"); el(info, "span", "wmeta wstale", fmtShort(cursor)); }
+        }
+        if (pend) { el(info, "span", "wsep", "·"); el(info, "span", "wmeta wstale", "not synced"); }
+      }
+
+      chartHost.textContent = "";
+      if (view.length >= 2) chartHost.appendChild(chart(view, chartH, cT));
+
+      if (wantFocus) { wantFocus = false;
+        const i = card.querySelector(".winput"); if (i) { i.focus(); i.select(); } }
+    }
+    views.push(paint);
+    paint();
+  }
+
+  async function mount(host, opts) {
+    if (!host) return;
+    try { await load(); } catch (e) { return; }   /* never block the host view */
+    build(host, (opts && opts.chartH) || 60);
+  }
+  return { mount };
+})();
+
+/* ====================================================================
    WORKOUT — faithful port of orgs/health/Workout.md (Renovatio skin).
    Same files, same entry schema; the PC widget and /workout-review
    read what this writes. Append-only log: one JSON per movement/day.
@@ -2069,6 +2421,11 @@ const Workout = (() => {
         `⚠ Plan week ended ${week.review_due} — run /workout-review to roll the week. Cards below still show the old week's plan.`);
     }
 
+    /* bodyweight card — same component the Diet view mounts (shaping D-2/D-4).
+       Between the header rule and the day tabs: the tabs are plan slots and
+       carry no date, so the card brings its own dated stepper. */
+    Weight.mount(el(root, "div", "wmount"), { chartH: 60 });
+
     const tabs = el(root, "div", "tabs");
     tabEls = [];
     week.days.forEach((d, i) => {
@@ -2539,6 +2896,8 @@ const Food = (() => {
     hl.createDiv({ cls: "brand serif", text: "Diet" });
     const hrEl = hdr.createDiv({ cls: "hr" });
     hrEl.createDiv({ cls: "targetline", text: `target ${MEAL_TARGET.cal} cal · ${MEAL_TARGET.p}g protein · ${TARGETS.meals_per_day} meals / day` });
+
+    Weight.mount(wrap.createDiv({ cls: "wmount" }), { chartH: 60 });
 
     const filtersEl = wrap.createDiv({ cls: "filters" });
     const layout = wrap.createDiv({ cls: "layout" });

@@ -460,3 +460,96 @@ body { min-height:100%; }
   .food .statrow{grid-template-columns:repeat(4,1fr);gap:4px}
   .food .statv{font-size:var(--fs-dense)}
 }
+
+/* ---------- Weight card · mounted at the top of Workout and Diet ----------
+   Shape: orgs/builder/shaping/workout-weight-tracking.md
+   Class names are w-prefixed and NOT shared with .wkt/.food, so the same
+   markup renders identically under both skins with no cascade collisions. */
+.wmount{display:block}
+.wcard{border:1px solid var(--hairline);background:var(--card);border-radius:var(--radius);
+  padding:9px 13px 10px;margin:16px 0 4px;font-family:var(--body)}
+/* everything but the chart lives on one row — stacking the date, number, rate
+   and axis cost ~180px of a 330px card for four short strings */
+.whead{display:flex;align-items:center;gap:7px 14px;flex-wrap:wrap;margin-bottom:7px}
+.wstep{display:inline-flex;align-items:center;border:1px solid var(--hairline);
+  border-radius:var(--radius);overflow:hidden;flex:0 0 auto}
+.warw{padding:5px 10px;background:none;border:none;cursor:pointer;color:var(--gold);
+  font-family:var(--mono);font-size:var(--fs-dense);line-height:1}
+.warw:disabled{color:var(--hairline);cursor:default}
+.warw:hover:not(:disabled){background:var(--gold-wash)}
+.wday{padding:5px 11px;background:none;border:none;border-left:1px solid var(--hairline);
+  border-right:1px solid var(--hairline);cursor:pointer;color:var(--fg);font-family:var(--mono);
+  font-size:var(--fs-meta);letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap}
+.wday:hover{color:var(--gold)}
+.wdaywrap{position:relative;display:inline-flex}
+/* the real control, laid transparently over its own label */
+.wdate{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;padding:0;margin:0;
+  cursor:pointer;font-family:var(--mono);color:transparent;background:transparent}
+.wdaywrap:focus-within .wday{color:var(--gold)}
+.wdaywrap:focus-within{box-shadow:var(--focus-ring);border-radius:2px}
+.wday[data-today="1"]{color:var(--gold)}
+.wval{display:flex;align-items:baseline;gap:8px;min-width:0}
+.wmoney{display:inline-flex;align-items:baseline;gap:8px;background:none;border:none;padding:0;
+  cursor:pointer;text-align:left;border-bottom:1px dashed transparent;font-family:inherit}
+.wmoney:hover{border-bottom-color:var(--gold-dim)}
+.wmoney:hover .wpencil{opacity:1}
+.wnum{font-family:var(--serif);font-weight:700;font-size:30px;line-height:1;color:var(--fg);
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.wunit{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
+.wpencil{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--gold);opacity:0;transition:opacity .12s}
+.winfo{display:flex;align-items:baseline;gap:7px;font-family:var(--mono);font-size:var(--fs-meta);
+  letter-spacing:.6px;white-space:nowrap;min-width:0}
+.wrate{font-variant-numeric:tabular-nums}
+.wrate[data-dir="down"]{color:var(--done)}
+.wrate[data-dir="up"]{color:var(--warn)}
+.wrate[data-dir="none"]{color:var(--faint)}
+.wmeta{color:var(--faint)}
+/* NOT `.stale` — that collides with .wkt .stale, the plan-week banner,
+   which carries padding, a background and a left rule. */
+.wmeta.wstale{color:var(--warn)}
+.wsep{color:var(--gold-dim)}
+.wrange{display:inline-flex;border:1px solid var(--hairline);border-radius:var(--radius);
+  overflow:hidden;margin-left:auto;flex:0 0 auto}
+.wrbtn{padding:6px 13px;background:none;border:none;cursor:pointer;color:var(--faint);
+  font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:.18em;text-transform:uppercase}
+.wrbtn + .wrbtn{border-left:1px solid var(--hairline)}
+.wrbtn[data-on="1"]{color:var(--gold);background:var(--gold-wash)}
+.wchart svg{display:block}
+.wslot{display:inline-flex;align-items:center;gap:9px;background:transparent;border:1px dashed var(--gold-dim);
+  border-radius:var(--radius);color:var(--gold);font-family:var(--mono);font-size:var(--fs-meta);
+  letter-spacing:.12em;text-transform:uppercase;padding:8px 13px;cursor:pointer;min-height:34px}
+.wslot:hover{border-color:var(--gold);background:var(--gold-wash)}
+.winput{width:5ch;background:transparent;border:none;border-bottom:2px solid var(--gold);color:var(--fg);
+  font-family:var(--serif);font-weight:700;font-size:30px;line-height:1;padding:0 0 2px;
+  font-variant-numeric:tabular-nums;outline:none}
+.winput::placeholder{color:var(--gold-dim);opacity:.45}
+.winput::selection{background:var(--gold);color:var(--bg)}
+.wacts{display:flex;gap:6px;margin-left:auto;align-self:center;flex:0 0 auto}
+.wact{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1.2px;text-transform:uppercase;
+  padding:6px 11px;background:none;border:1px solid var(--hairline);border-radius:var(--radius);
+  color:var(--dim);cursor:pointer;min-height:34px}
+.wact:hover{border-color:var(--gold-dim);color:var(--fg)}
+.wact.primary{color:var(--gold);border-color:var(--gold-dim);background:var(--gold-wash)}
+.wact.danger:hover{border-color:var(--crimson);color:var(--crimson)}
+.whint{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;
+  color:var(--faint);margin:0 0 6px}
+.werr{font-family:var(--mono);font-size:var(--fs-meta);color:var(--err);margin:0 0 6px;
+  border-left:2px solid var(--err);padding-left:9px}
+.wconfirm{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 6px;padding:7px 10px;
+  border-left:2px solid var(--warn);background:var(--warn-dim);font-family:var(--mono);
+  font-size:var(--fs-meta);color:var(--warn);line-height:1.5}
+.wmoney:focus-visible,.winput:focus-visible,.wact:focus-visible,.wslot:focus-visible,
+.warw:focus-visible,.wday:focus-visible,.wrbtn:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+@media (max-width:640px){
+  /* the row wraps here, so wrap it meaningfully: controls first, reading second */
+  .wrange,.wacts{order:1}
+  .wval{order:2;flex:1 0 auto}
+  .winfo{order:3}
+  .wchart{order:4}
+  .whead{gap:6px 10px}
+  .wnum,.winput{font-size:26px}
+  .wday{padding:5px 8px;letter-spacing:.06em}
+  .wrbtn{padding:5px 7px;letter-spacing:.04em}
+  .warw{padding:5px 7px}
+}
