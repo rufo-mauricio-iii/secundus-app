@@ -327,7 +327,10 @@ const Home = (() => {
   const JOURNAL_DIR   = 'orgs/health/journal';
   const INBOX_DIR     = 'orgs/command-center/inbox';
   const TRIGGERS_DIR  = 'orgs/command-center/data/triggers';
-  const CALENDAR_SNAPSHOT_PATH = 'orgs/command-center/data/calendar_snapshot.json';
+  /* written by .github/workflows/calendar-fetch.yml — six tier feeds, expanded.
+     The old calendar_snapshot.json is left in place but is no longer read. */
+  const CALENDAR_FEED_PATH = 'orgs/command-center/data/calendar_feed.json';
+  const CALENDAR_WORKFLOW = 'calendar-fetch.yml';
   const LOG_PATH      = 'shared/actions.log';
   const DAY = 86400000;
   const WEEKDAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
@@ -838,7 +841,9 @@ const Home = (() => {
     return html || '<div class="stub-line">Nothing to show.</div>';
   }
   const CAL_GRID_START_MIN = 5 * 60, CAL_GRID_END_MIN = 24 * 60, CAL_ROW_H = 22, CAL_MIN_EV_H = 19;
-  let CAL_DAY_WINDOW = 3;
+  /* one day at a time, stepped: the column takes the full card width, so titles wrap
+     instead of clipping. Each press moves the view exactly one day, unbounded. */
+  let CAL_DAY_OFFSET = 0;
   const CAL_DOMAIN_ACCENT = {
     '9':  { c: 'var(--purple)', cDim: 'var(--purple-dim)' },
     '11': { c: 'var(--red)',    cDim: 'var(--red-dim)' },
@@ -882,41 +887,93 @@ const Home = (() => {
     }
     return out;
   }
-  function buildCalendarTimeline(snapshot) {
+  /* the feed refreshes once a day, so stale is the normal state — say so rather
+     than letting the card look current */
+  function calAsOf(snapshot) {
+    const t = snapshot && snapshot.computed_at ? new Date(snapshot.computed_at) : null;
+    if (!t || isNaN(t.getTime())) return '';
+    const mins = Math.round((Date.now() - t.getTime()) / 60000);
+    const age = mins < 2 ? 'just now'
+      : mins < 60 ? `${mins}m ago`
+      : mins < 60 * 36 ? `${Math.round(mins / 60)}h ago`
+      : `${Math.round(mins / 1440)}d ago`;
+    const stale = mins > 60 * 26;
+    return `<span class="cal-asof${stale ? ' cal-asof-stale' : ''}" title="Fetched ${t.toLocaleString()}">as of ${age}</span>`;
+  }
+  function calViewedDate() {
+    const d = new Date(); d.setDate(d.getDate() + CAL_DAY_OFFSET); return d;
+  }
+  /* snapshot events for one calendar day, laid out into overlap lanes */
+  function calEventsFor(snapshot, date) {
     const events = (snapshot && Array.isArray(snapshot.events)) ? snapshot.events : [];
-    if (events.length === 0) return `<div class="stub-line">Nothing on the calendar for today or the next ${CAL_DAY_WINDOW - 1} days.</div>`;
-    const today = new Date();
-    const days = Array.from({ length: CAL_DAY_WINDOW }, (_, i) => { const d = new Date(today); d.setDate(d.getDate() + i); return d; });
-    const todayKey = calDateKey(today);
-    const byDay = days.map(d => {
-      const key = calDateKey(d);
-      const dayEvents = events
-        .map(ev => ({ ...ev, s: new Date(ev.start), e: new Date(ev.end) }))
-        .filter(ev => !isNaN(ev.s.getTime()) && !isNaN(ev.e.getTime()) && calDateKey(ev.s) === key)
-        .map(ev => ({ ...ev, startMin: ev.s.getHours() * 60 + ev.s.getMinutes(), endMin: ev.e.getHours() * 60 + ev.e.getMinutes() }));
-      return { date: d, key, isToday: key === todayKey, events: calLayoutDay(dayEvents) };
-    });
+    const key = calDateKey(date);
+    return calLayoutDay(events
+      /* all-day items have no position on an hour grid — they are closer to the
+         "bombs" stream, whose placement is a later shape (Decision 15) */
+      .filter(ev => !ev.allDay)
+      .map(ev => ({ ...ev, s: new Date(ev.start), e: new Date(ev.end) }))
+      .filter(ev => !isNaN(ev.s.getTime()) && !isNaN(ev.e.getTime()) && calDateKey(ev.s) === key)
+      .map(ev => ({ ...ev, startMin: ev.s.getHours() * 60 + ev.s.getMinutes(), endMin: ev.e.getHours() * 60 + ev.e.getMinutes() })));
+  }
+  function calHhmm(min) { return `${pad(Math.floor(min / 60))}:${pad(min % 60)}`; }
+
+  /* the next thing, large — title, window, countdown, and the fields that let you show up.
+     location / conferenceUrl render only when the snapshot carries them. */
+  function buildCalendarNext(snapshot) {
+    if (CAL_DAY_OFFSET !== 0) return '';
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    /* ties broken by the longer event, so the pick is stable rather than lane order */
+    const today = calEventsFor(snapshot, now).slice()
+      .sort((a, b) => a.startMin - b.startMin || (b.endMin - b.startMin) - (a.endMin - a.startMin));
+    const next = today.find(ev => ev.startMin > nowMin);
+    if (!next) return '';
+    const accent = calAccentFor(next.colorId).c;
+    const mins = next.startMin - nowMin;
+    const when = mins >= 60 ? `in ${Math.floor(mins / 60)}h ${mins % 60}m` : `in ${mins} min`;
+    const after = today.filter(ev => ev.startMin > next.startMin).length;
+    const bits = [];
+    if (next.location) bits.push(`<span>&#128205; ${esc(next.location)}</span>`);
+    if (next.conferenceUrl) bits.push(`<a class="cal-join" href="${esc(next.conferenceUrl)}" target="_blank" rel="noopener">&#128279; join</a>`);
+    return `<div class="cal-next" style="border-left-color:${accent}">`
+      + `<div class="cal-next-h"><span class="cal-next-lbl" style="color:${accent}">NEXT</span>`
+      + `<span class="cal-next-win">${calHhmm(next.startMin)}&ndash;${calHhmm(next.endMin)}</span>`
+      + `<span class="cal-next-cd">${when}</span></div>`
+      + `<div class="cal-next-t">${esc(next.title)}</div>`
+      + (bits.length ? `<div class="cal-next-m">${bits.join('')}</div>` : '')
+      + (after ? `<div class="cal-next-more">then ${after} more today</div>` : '')
+      + `</div>`;
+  }
+
+  function buildCalendarTimeline(snapshot) {
+    const date = calViewedDate();
+    const isToday = CAL_DAY_OFFSET === 0;
+    const dayEvents = calEventsFor(snapshot, date);
+    if (dayEvents.length === 0) {
+      return `<div class="stub-line">Nothing on the calendar for ${esc(calColHeading(date))}.</div>`;
+    }
     const gridHeight = ((CAL_GRID_END_MIN - CAL_GRID_START_MIN) / 60) * CAL_ROW_H;
     const hourLabels = [];
     for (let m = CAL_GRID_START_MIN; m < CAL_GRID_END_MIN; m += 60) hourLabels.push(`${pad(Math.floor(m / 60))}:00`);
-    const header = `<div class="cal-head-row"><div class="cal-gutter"></div>` +
-      byDay.map(d => `<div class="cal-head-cell${d.isToday ? ' cal-head-today' : ''}">${esc(calColHeading(d.date))}</div>`).join('<div class="cal-head-sp"></div>') +
-      `</div>`;
     const gutter = `<div class="cal-gutter">` + hourLabels.map(h => `<div class="cal-hour-label">${h}</div>`).join('') + `</div>`;
-    const nowMin = today.getHours() * 60 + today.getMinutes();
-    const cols = byDay.map(d => {
-      const evHtml = d.events.map(ev => {
-        const accent = calAccentFor(ev.colorId);
-        const top = calPxTop(ev.startMin), height = calPxHeight(ev.startMin, ev.endMin);
-        const border = d.isToday ? accent.c : accent.cDim;
-        const cls = d.isToday ? 'cal-ev cal-ev-today' : 'cal-ev cal-ev-future';
-        return `<div class="${cls}" style="top:${top}px;height:${height}px;left:${ev.left}%;width:${ev.width}%;border-left-color:${border}" title="${esc(ev.title)}">${esc(ev.title)}</div>`;
-      }).join('');
-      const nowLine = (d.isToday && nowMin >= CAL_GRID_START_MIN && nowMin < CAL_GRID_END_MIN)
-        ? `<div class="cal-now-line" style="top:${calPxTop(nowMin)}px"><span class="cal-now-dot"></span></div>` : '';
-      return `<div class="cal-col${d.isToday ? ' cal-col-today' : ' cal-col-future'}">${evHtml}${nowLine}</div>`;
-    }).join('<div class="cal-col-sp"></div>');
-    return header + `<div class="cal-scroll"><div class="cal-row" style="height:${gridHeight}px">${gutter}${cols}</div></div>`;
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    /* one column, full width — so titles wrap rather than clip */
+    const evHtml = dayEvents.map(ev => {
+      const accent = calAccentFor(ev.colorId);
+      const top = calPxTop(ev.startMin), height = calPxHeight(ev.startMin, ev.endMin);
+      const border = isToday ? accent.c : accent.cDim;
+      /* wrap only where a second line actually fits; below that a clean single
+         line beats a cut-off one, and at full card width most short titles fit */
+      const cls = `cal-ev${height >= 30 ? ' cal-ev-wide' : ''} ${isToday ? 'cal-ev-today' : 'cal-ev-future'}`;
+      const loc = (ev.location && height >= 30) ? `<div class="cal-ev-loc">&#128205; ${esc(ev.location)}</div>` : '';
+      return `<div class="${cls}" style="top:${top}px;height:${height}px;left:${ev.left}%;width:${ev.width}%;border-left-color:${border}" title="${esc(ev.title)}">${esc(ev.title)}${loc}</div>`;
+    }).join('');
+    const nowLine = (isToday && nowMin >= CAL_GRID_START_MIN && nowMin < CAL_GRID_END_MIN)
+      ? `<div class="cal-now-line" style="top:${calPxTop(nowMin)}px"><span class="cal-now-dot"></span></div>` : '';
+    return `<div class="cal-scroll"><div class="cal-row" style="height:${gridHeight}px">${gutter}`
+      + `<div class="cal-col${isToday ? ' cal-col-today' : ' cal-col-future'}">${evHtml}${nowLine}</div>`
+      + `</div></div>`;
   }
   const GM_MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const GM_ORDER = ['Recruiting','Networking','Academic','Health','Personal ops','Community'];
@@ -981,9 +1038,9 @@ const Home = (() => {
   async function renderToday(root = ROOT) {
     const body = root.querySelector('#todayBody');
     if (!body) return;
-    const snapshot = await readJSON(CALENDAR_SNAPSHOT_PATH, null);
+    const snapshot = await readJSON(CALENDAR_FEED_PATH, null);
     const calBody = snapshot ? buildCalendarTimeline(snapshot)
-      : '<div class="stub-line">No calendar snapshot yet — calendar-briefing hasn’t run.</div>';
+      : '<div class="stub-line">No calendar feed yet — press ⟳ to fetch, or wait for the daily run.</div>';
     let gmailBody, gmailLabel = 'Gmail';
     const jsonFile = await findLatest(/^gmail-brief-\d{4}-\d{2}-\d{2}\.json$/);
     if (jsonFile) {
@@ -1001,18 +1058,98 @@ const Home = (() => {
       } else gmailBody = '<div class="stub-line">No Gmail briefing yet — gmail-briefing hasn’t run.</div>';
     }
     body.innerHTML =
-      `<div class="today-block"><div class="today-block-h">Calendar</div><div class="today-block-b cal-wrap">${calBody}</div></div>` +
+      `<div class="today-block"><div class="today-block-h">Calendar${calAsOf(snapshot)}</div><div class="today-block-b cal-wrap">${buildCalendarNext(snapshot)}${calBody}</div></div>` +
       `<div class="today-block"><div class="today-block-h">${esc(gmailLabel)}</div><div class="today-block-b">${gmailBody}</div></div>`;
     const scrollBox = body.querySelector('.cal-scroll');
     const nowLine = body.querySelector('.cal-now-line');
-    if (scrollBox && nowLine) scrollBox.scrollTop = Math.max(0, parseFloat(nowLine.style.top) - 80);
-    const tag = root.querySelector('#todayDateTag');
-    if (tag) {
-      const d = new Date();
-      const MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-      tag.textContent = `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+    /* open on the working day, not on the top of the grid */
+    if (scrollBox) {
+      scrollBox.scrollTop = nowLine
+        ? Math.max(0, parseFloat(nowLine.style.top) - 80)
+        : Math.max(0, calPxTop(8 * 60) - 20);
+    }
+    renderCalHeader(root);
+  }
+  /* ⟳ starts a real fetch: dispatch the workflow, then wait for the file to change.
+     Needs the token to carry Actions: read and write — Contents alone returns 403. */
+  async function refreshCalendar(root, btn) {
+    if (btn.dataset.busy === '1') return;
+    btn.dataset.busy = '1';
+    btn.classList.add('spin');
+    const before = await readJSON(CALENDAR_FEED_PATH, null);
+    const stamp = before && before.computed_at;
+    try {
+      const res = await gh(`actions/workflows/${CALENDAR_WORKFLOW}/dispatches`, {
+        method: 'POST',
+        body: JSON.stringify({ ref: 'main' }),
+      });
+      if (res.status === 403 || res.status === 404) {
+        toast('Refresh needs a token with Actions: read and write', 5000);
+        return;
+      }
+      if (!res.ok && res.status !== 204) {
+        toast(`Refresh failed — GitHub ${res.status}`, 4000);
+        return;
+      }
+      toast('Fetching calendars…', 2000);
+      /* poll until the committed file carries a newer timestamp, ~90s ceiling */
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const now = await readJSON(CALENDAR_FEED_PATH, null);
+        if (now && now.computed_at && now.computed_at !== stamp) {
+          INBOX_FILES = null;
+          await renderToday(root);
+          toast('Calendar updated', 2500);
+          return;
+        }
+      }
+      toast('Fetch started but has not landed yet — check Actions', 5000);
+    } catch (e) {
+      toast('Refresh failed — see console', 4000);
+      console.error(e);
+    } finally {
+      btn.classList.remove('spin');
+      btn.dataset.busy = '0';
     }
   }
+  const CAL_MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  function calRelLabel(off) {
+    if (off === 0) return 'Today';
+    if (off === 1) return 'Tomorrow';
+    if (off === -1) return 'Yesterday';
+    return `${off > 0 ? '+' : '−'}${Math.abs(off)} days`;
+  }
+  /* the gold date is the link out: Google Calendar, opened on the day being viewed */
+  function calGoogleUrl(d) {
+    return `https://calendar.google.com/calendar/u/0/r/day/${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  function renderCalHeader(root = ROOT) {
+    if (!root) return;
+    const d = calViewedDate(), isToday = CAL_DAY_OFFSET === 0;
+    const rel = root.querySelector('#calRel');
+    if (rel) {
+      rel.textContent = calRelLabel(CAL_DAY_OFFSET);
+      rel.classList.toggle('cal-rel-off', !isToday);
+      rel.disabled = isToday;
+    }
+    const tag = root.querySelector('#todayDateTag');
+    if (tag) {
+      const now = new Date();
+      const clock = isToday ? ` · ${pad(now.getHours())}:${pad(now.getMinutes())}` : '';
+      tag.textContent = `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${CAL_MON[d.getMonth()]}${clock}`;
+      tag.href = calGoogleUrl(d);
+    }
+  }
+  /* one clock drives both the header time and the now-line */
+  setInterval(() => {
+    if (CAL_DAY_OFFSET !== 0 || !ROOT) return;
+    renderCalHeader();
+    const nl = ROOT.querySelector('.cal-now-line');
+    if (nl) {
+      const n = new Date();
+      nl.style.top = calPxTop(n.getHours() * 60 + n.getMinutes()) + 'px';
+    }
+  }, 60000);
 
   /* ---- view switching (WORKOUT/DIET host the ported Health apps) ---- */
   const VIEWS = ['home', 'todo', 'pipeline', 'academics', 'projects', 'workout', 'diet', 'builder'];
@@ -1077,9 +1214,15 @@ const Home = (() => {
       if (th) { const tb = th.nextElementSibling; tb.classList.toggle('open'); th.querySelector('.tcar').innerHTML = tb.classList.contains('open') ? '&#9660;' : '&#9654;'; return; }
       if (t.closest('#syncBtn')) { openTokenReset(root); return; }
       const rf = t.closest('.sb-refresh');
-      if (rf) { rf.classList.add('spin'); INBOX_FILES = null; renderToday(root).finally(() => setTimeout(() => rf.classList.remove('spin'), 400)); return; }
-      const dt = t.closest('.cal-day-toggle');
-      if (dt) { CAL_DAY_WINDOW = CAL_DAY_WINDOW === 3 ? 2 : 3; dt.textContent = CAL_DAY_WINDOW + 'd'; renderToday(root); return; }
+      if (rf) { refreshCalendar(root, rf); return; }
+      /* step the calendar a day at a time; the relative label is the way back to today */
+      const cs = t.closest('#calPrev, #calNext, #calRel');
+      if (cs) {
+        if (cs.id === 'calRel') CAL_DAY_OFFSET = 0;
+        else CAL_DAY_OFFSET += (cs.id === 'calNext' ? 1 : -1);
+        renderToday(root);
+        return;
+      }
       const nb = t.closest('.nav-btn[data-view]');
       if (nb) { showView(root, nb.getAttribute('data-view')); return; }
       if (t.closest('[data-open-board]')) { showView(root, 'todo'); return; }
@@ -1327,11 +1470,13 @@ const Home = (() => {
       <div class="cap-recent" id="capRecent"></div>
     </div>
     <div class="sb-section">
-      <h4>Today
-        <span style="display:flex;align-items:center;gap:6px">
-          <span class="h4-sub" id="todayDateTag"></span>
-          <button class="cal-day-toggle" id="calDayToggle" title="Toggle 2-day / 3-day calendar view">3d</button>
-          <button class="sb-refresh" title="Re-read Gmail + Calendar briefings">⟳</button>
+      <h4><button class="cal-rel" id="calRel" title="Back to today">Today</button>
+        <span style="display:flex;align-items:center;gap:2px">
+          <button class="cal-step" id="calPrev" title="Previous day">&lsaquo;</button>
+          <a class="cal-date" id="todayDateTag" target="_blank" rel="noopener"
+             title="Open this day in Google Calendar"></a>
+          <button class="cal-step" id="calNext" title="Next day">&rsaquo;</button>
+          <button class="sb-refresh" title="Fetch the calendars now">⟳</button>
         </span>
       </h4>
       <div id="todayBody"></div>
