@@ -2217,10 +2217,13 @@ const Workout = (() => {
 
   /* ---- rest clocks ---------------------------------------------------------
      Two rests matter in this plan and they are not the same thing. Between
-     EXERCISES you pause on one movement before the next (30s in the warm-up,
-     the block rest elsewhere) — that is the per-card button. Between SETS you
-     finish a whole round of a superset and rest before going again — that is
-     the set bar, which also has to know which round you are on.
+     EXERCISES you pause on one movement before the next — that is the per-card
+     button, and it belongs only to one-pass lists (30s in the warm-up) and to
+     the finisher. It must NOT appear inside a superset: there the paired
+     exercise is the rest, and a button between the two halves quietly converts
+     the pair into straight sets. Between ROUNDS you finish both halves and rest
+     before going again — that is the set bar, which also has to know which
+     round you are on.
 
      Counting down from a deadline rather than decrementing a variable: phone
      browsers throttle timers in a backgrounded tab, and a naive counter drifts
@@ -2507,7 +2510,10 @@ const Workout = (() => {
       const rest = room ? (block.rest ?? 60) : restSecFor("ss", bi);
       const s = sectionHead(host, block.label || `Superset ${bi + 1}`, roundLabel(r));
       setBar(s, `${d.key}|${gear}|ss${bi}`, r, rest);
-      movementGrid(s, d.key, block.ex, { section: block.label || "Superset", mode: defaultLogMode("ss"), rest });
+      /* no per-card rest inside a superset: the paired exercise IS the rest.
+         Resting between the two halves turns the pair back into straight sets.
+         The only rest that belongs here is the set bar's, after a full round. */
+      movementGrid(s, d.key, block.ex, { section: block.label || "Superset", mode: defaultLogMode("ss") });
     });
     if (Array.isArray(src.finisher) && src.finisher.length) {
       const label = d.type === "engine" && !room ? "Core" : "Finisher";
