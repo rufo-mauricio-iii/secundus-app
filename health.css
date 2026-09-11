@@ -69,6 +69,7 @@ body { min-height:100%; }
 /* ---------- Workout · Renovatio skin (ported from Workout.md) ---------- */
 .wkt{ color:var(--fg); background:var(--bg); font-family:var(--body);
   width:100%; max-width:none; font-size:var(--fs-body); line-height:1.5; padding:4px 0 28px;
+  container-type:inline-size; container-name:wkt;   /* the movement grid sizes off this frame, not the viewport */
   /* retired — mapped onto the file-wide scale */ }
 .wkt .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .wkt .label{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--gold-dim)}
@@ -103,7 +104,7 @@ body { min-height:100%; }
 .wkt .stitle{font-family:var(--serif);font-size:var(--fs-dense);letter-spacing:3px;text-transform:uppercase;color:var(--gold);white-space:nowrap}
 .wkt .srule{flex:1;height:1px;background:var(--hairline)}
 .wkt .smeta{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint);white-space:nowrap}
-.wkt .grid{display:grid;gap:14px}
+.wkt .grid{display:grid;gap:var(--gutter-sm)}
 .wkt .mc{position:relative;display:grid;grid-template-columns:320px 1fr;border:1px solid var(--hairline);background:var(--card);overflow:hidden;border-radius:4px}
 .wkt .mc.done{border-color:var(--gold-dim)}
 .wkt .mcfig{position:relative;background:var(--card2);border-right:1px solid var(--hairline);min-height:170px}
@@ -189,11 +190,32 @@ body { min-height:100%; }
 .wkt .lightbox img{max-width:94vw;max-height:88vh;border:1px solid var(--hairline)}
 .wkt .lightbox .cap{position:fixed;bottom:26px;left:0;right:0;text-align:center;color:var(--dim);
   font-family:var(--mono);font-size:var(--fs-dense);letter-spacing:1px;text-transform:uppercase}
-@media (max-width:640px){
+/* ---------- movement grid · columns ----------
+   One card shape, two arrangements. The wide card (figure beside the body)
+   only survives on a mid-width frame, 641–759px, where one card has the room
+   and two would not. Everywhere else the card stacks, figure on top: on a
+   phone because the frame is narrow, on a desktop because the grid runs two
+   or three across. Column count is auto-fit against a floor of --mc-min,
+   capped at --mc-cols-max (tokens.css). auto-fit collapses empty tracks, so a
+   two-card superset on a three-column frame still fills the row, and a lone
+   card in a block keeps the wide shape. All of it keys off the .wkt frame
+   (a size container), so the same rules hold inside any host width. */
+@container wkt ((max-width:640px) or (min-width:760px)){
   .wkt .mc{grid-template-columns:1fr}
   .wkt .mcfig{aspect-ratio:16/9;min-height:0;border-right:none;border-bottom:1px solid var(--hairline)}
+}
+@container wkt (max-width:640px){
   .wkt .mcname{font-size:var(--fs-body)}   /* mobile: one step down */
   .wkt .mcctrl{gap:16px}
+}
+@container wkt (min-width:760px){
+  .wkt .grid{grid-template-columns:repeat(auto-fit,
+    minmax(max(var(--mc-min),calc((100% - (var(--mc-cols-max) - 1)*var(--gutter-sm))/var(--mc-cols-max))),1fr))}
+  .wkt .mcfig{aspect-ratio:21/9;max-height:190px}  /* short banner, capped: compact */
+  .wkt .mcbody{padding:14px 16px 12px;gap:10px}
+  .wkt .mc:only-child{grid-template-columns:320px 1fr}
+  .wkt .mc:only-child .mcfig{aspect-ratio:auto;min-height:170px;border-right:1px solid var(--hairline);border-bottom:none}
+  .wkt .mc:only-child .mcbody{padding:18px 20px 16px;gap:14px}
 }
 
 /* ---------- Food · Renovatio skin (ported from Food.md) ---------- */
