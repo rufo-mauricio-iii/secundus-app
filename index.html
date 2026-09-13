@@ -844,6 +844,7 @@ const Home = (() => {
   /* one day at a time, stepped: the column takes the full card width, so titles wrap
      instead of clipping. Each press moves the view exactly one day, unbounded. */
   let CAL_DAY_OFFSET = 0;
+  let CAL_SNAPSHOT = null;   // last-fetched feed, so the minute tick can rebuild NEXT without an API call
   const CAL_DOMAIN_ACCENT = {
     '9':  { c: 'var(--purple)', cDim: 'var(--purple-dim)' },
     '11': { c: 'var(--red)',    cDim: 'var(--red-dim)' },
@@ -1039,6 +1040,7 @@ const Home = (() => {
     const body = root.querySelector('#todayBody');
     if (!body) return;
     const snapshot = await readJSON(CALENDAR_FEED_PATH, null);
+    CAL_SNAPSHOT = snapshot;
     const calBody = snapshot ? buildCalendarTimeline(snapshot)
       : '<div class="stub-line">No calendar feed yet — press ⟳ to fetch, or wait for the daily run.</div>';
     let gmailBody, gmailLabel = 'Gmail';
@@ -1140,7 +1142,8 @@ const Home = (() => {
       tag.href = calGoogleUrl(d);
     }
   }
-  /* one clock drives both the header time and the now-line */
+  /* one clock drives the header time, the now-line, and the NEXT card —
+     without the last, the countdown freezes and a started event stays "next" */
   setInterval(() => {
     if (CAL_DAY_OFFSET !== 0 || !ROOT) return;
     renderCalHeader();
@@ -1148,6 +1151,13 @@ const Home = (() => {
     if (nl) {
       const n = new Date();
       nl.style.top = calPxTop(n.getHours() * 60 + n.getMinutes()) + 'px';
+    }
+    const wrap = ROOT.querySelector('.cal-wrap');
+    if (wrap) {
+      const html = buildCalendarNext(CAL_SNAPSHOT);
+      const cur = wrap.querySelector('.cal-next');
+      if (cur) { if (html) cur.outerHTML = html; else cur.remove(); }
+      else if (html) wrap.insertAdjacentHTML('afterbegin', html);
     }
   }, 60000);
 
@@ -1639,15 +1649,20 @@ const Weight = (() => {
   const MIN_LBS = 100, MAX_LBS = 400;   /* typo guard — see fit(), it is not robust */
   const DEV_LBS = 5;                    /* ask before accepting a big jump */
   const MIN_N = 3, MIN_SPAN = 10;       /* below this we do not claim a rate */
+  const DEFAULT_TARGET = 190;           /* orgs/health/weight_loss_plan.md — overridden by target_lbs in the log */
+  const MAX_ETA_DAYS = 365;             /* past a year the line is a guess, not a date */
+  const STEP = 0.1;
 
   /* noon UTC keeps a plain YYYY-MM-DD free of timezone drift when parsed */
   const T = d => Date.parse(d + "T12:00:00Z");
+  const isoOf = t => new Date(t).toISOString().slice(0, 10);
   function todayISO() {
     const d = new Date(), p = n => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   }
   const fmtShort = d => new Date(T(d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-  const fmtDay   = d => new Date(T(d)).toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).toUpperCase();
+  const fmtDay   = d => new Date(T(d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const fmtLong  = d => new Date(T(d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   const sign = v => (v > 0 ? "+" : "−") + Math.abs(v).toFixed(1);
 
   let doc = null, loading = null;
@@ -1658,6 +1673,8 @@ const Weight = (() => {
     .map(e => ({ date: e.date, lbs: e.lbs, t: T(e.date) }))
     .filter(e => isFinite(e.t))
     .sort((a, b) => a.t - b.t);
+  const target = () => (doc && isFinite(doc.target_lbs) && doc.target_lbs > 0) ? doc.target_lbs : DEFAULT_TARGET;
+  const planDate = () => (doc && typeof doc.target_date === "string" && isFinite(T(doc.target_date))) ? doc.target_date : null;
 
   /* Least squares of lbs against DAYS. Irregular sampling is native to it,
      which is the whole reason it answers "entries may be missing". */
@@ -1666,11 +1683,20 @@ const Weight = (() => {
     const t0 = es[0].t; let sx = 0, sy = 0, sxx = 0, sxy = 0;
     for (const e of es) { const x = (e.t - t0) / DAY, y = e.lbs; sx += x; sy += y; sxx += x * x; sxy += x * y; }
     const den = n * sxx - sx * sx; if (!den) return null;
-    const b = (n * sxy - sx * sy) / den;
-    return { b, a: (sy - b * sx) / n, t0 };
+    const b = (n * sxy - sx * sy) / den, a = (sy - b * sx) / n;
+    return { b, a, t0, at: t => a + b * ((t - t0) / DAY) };
   }
   const spanDays = es => es.length < 2 ? 0 : (es[es.length - 1].t - es[0].t) / DAY;
-
+  /* the guard: a slope through two readings is just the line between them */
+  const canFit = es => es.length >= MIN_N && spanDays(es) >= MIN_SPAN;
+  /* when the fitted line crosses the target: null if it never does, is already
+     behind us, or is more than a year out */
+  function eta(f, lastT, tgt) {
+    if (!f || !f.b) return null;
+    const t = f.t0 + ((tgt - f.a) / f.b) * DAY;
+    if (!(t > lastT) || (t - lastT) / DAY > MAX_ETA_DAYS) return null;
+    return t;
+  }
   /* trailing 7 DAYS, not the last 7 entries — the latter spans a week at daily
      cadence and seven weeks at Mondays-only */
   function headline(es, endT) {
@@ -1680,69 +1706,87 @@ const Weight = (() => {
     const use = win.length ? win : [es[es.length - 1]];
     return use.reduce((s, e) => s + e.lbs, 0) / use.length;
   }
-  /* the guard: a slope through two readings is just the line between them */
-  function readout(es, endT) {
-    if (!es.length) return { kind: "empty" };
-    const avg = headline(es, endT);
-    if (es.length >= MIN_N && spanDays(es) >= MIN_SPAN) return { kind: "rate", avg, wk: fit(es).b * 7 };
-    return { kind: "delta", avg, delta: es[es.length - 1].lbs - es[0].lbs, days: spanDays(es) };
-  }
 
   const NS = "http://www.w3.org/2000/svg";
   const sv = (p, n, at) => { const e = document.createElementNS(NS, n);
     for (const k in at) e.setAttribute(k, at[k]); p.appendChild(e); return e; };
+  /* Catmull-Rom through the points, as cubic beziers — the design's curve */
+  function smooth(pts) {
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6, c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x},${p2.y}`;
+    }
+    return d;
+  }
 
-  /* X is the calendar date, never the entry index: toggleTrend() below maps by
-     index, which is right for lift history and wrong here — it would give a
-     six-week gap and a one-day gap the same width. */
-  function chart(es, h, cursorT) {
-    const w = 640, pL = 3, pR = 3, pT = 8, pB = 5;
+  /* X is the calendar date, never the entry index: a six-week gap and a
+     one-day gap must not get the same width. w is the host's real pixel width
+     so text keeps its shape; onPick(date) fires as the pointer moves, snapped
+     to the nearest reading — that is how you scrub the history. */
+  function chart(es, h, w, tgt, cursorT, f, tHit, onPick) {
+    const pL = 2, pR = 2, pT = 14, pB = 10;
     const svg = document.createElementNS(NS, "svg");
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     svg.setAttribute("width", "100%"); svg.setAttribute("height", h);
-    svg.setAttribute("preserveAspectRatio", "none");
     svg.setAttribute("role", "img");
-    svg.style.display = "block";
     if (es.length < 2) return svg;
-    svg.setAttribute("aria-label",
-      `Body weight ${es[0].date} to ${es[es.length - 1].date}, ${es[0].lbs} to ${es[es.length - 1].lbs} pounds`);
-
-    const lo = Math.min(...es.map(e => e.lbs)), hi = Math.max(...es.map(e => e.lbs));
-    const pad = Math.max((hi - lo) * 0.18, 0.5), y0 = lo - pad, y1 = hi + pad;
-    const Y = v => h - pB - ((v - y0) / (y1 - y0)) * (h - pT - pB);
     const t0 = es[0].t, tLast = es[es.length - 1].t;
-    /* extend to the cursor day so an unlogged today reads AS a gap instead of
-       drawing the marker off the edge */
-    const t1 = (cursorT != null) ? Math.max(tLast, cursorT) : tLast;
-    const tr = (t1 - t0) || 1;
-    const X = e => pL + ((e.t - t0) / tr) * (w - pL - pR);
+    svg.setAttribute("aria-label",
+      `Body weight ${es[0].date} to ${es[es.length - 1].date}, ${es[0].lbs} to ${es[es.length - 1].lbs} pounds`
+      + (tHit ? `, on trend to reach ${tgt} on ${isoOf(tHit)}` : ""));
 
-    for (const v of [y1 - pad, y0 + pad])
-      sv(svg, "line", { x1: 0, x2: w, y1: Y(v), y2: Y(v), stroke: "#FFFFFF14", "stroke-width": 1 });
+    const hi = Math.max(...es.map(e => e.lbs)), lo = Math.min(...es.map(e => e.lbs));
+    const y0 = Math.min(tgt - 1.5, lo - 1), y1 = Math.ceil(hi) + 1;
+    const tEnd = tHit ? tHit + 6 * DAY : Math.max(tLast, cursorT || 0) + 7 * DAY;
+    const Y = v => h - pB - ((v - y0) / (y1 - y0)) * (h - pT - pB);
+    const X = t => pL + ((t - t0) / (tEnd - t0)) * (w - pL - pR);
 
-    sv(svg, "path", { d: es.map((e, i) => `${i ? "L" : "M"}${X(e).toFixed(1)},${Y(e.lbs).toFixed(1)}`).join(" "),
-      fill: "none", stroke: "#9A9286", "stroke-width": 1, "stroke-opacity": .34,
-      "stroke-linejoin": "round", "stroke-linecap": "round" });
-    es.forEach(e => sv(svg, "circle", { cx: X(e).toFixed(1), cy: Y(e.lbs).toFixed(1), r: 1.6,
-      fill: "#9A9286", "fill-opacity": .55 }));
+    const defs = sv(svg, "defs", {});
+    const grad = sv(defs, "linearGradient", { id: "wt-area", x1: 0, y1: 0, x2: 0, y2: 1 });
+    sv(grad, "stop", { offset: 0, "stop-color": "#C9A227", "stop-opacity": .2 });
+    sv(grad, "stop", { offset: 1, "stop-color": "#C9A227", "stop-opacity": 0 });
 
-    const f = fit(es);
-    if (f) {
-      const at = t => f.a + f.b * ((t - f.t0) / DAY);
-      const ax = X(es[0]), bx = X(es[es.length - 1]);
-      const ay = Y(at(t0)), by = Y(at(tLast));
-      sv(svg, "path", { d: `M${ax},${ay} L${bx},${by} L${bx},${h} L${ax},${h} Z`, fill: "#C9A227", "fill-opacity": .07 });
-      sv(svg, "path", { d: `M${ax},${ay} L${bx},${by}`, fill: "none", stroke: "#C9A227",
-        "stroke-width": 1.6, "stroke-linecap": "round" });
+    for (let v = Math.ceil(y0 / 5) * 5; v <= y1; v += 5) {
+      sv(svg, "line", { x1: pL, x2: w - pR, y1: Y(v), y2: Y(v), class: "wt-grid" });
+      sv(svg, "text", { x: w - pR, y: Y(v) - 5, "text-anchor": "end", class: "wt-lab" }).textContent = `${v} lb`;
     }
-    if (cursorT != null) {
-      const cx = pL + ((cursorT - t0) / tr) * (w - pL - pR);
-      sv(svg, "line", { x1: cx, x2: cx, y1: 0, y2: h, stroke: "#C9A227", "stroke-width": 1, "stroke-opacity": .38 });
-      const hit = es.find(e => e.t === cursorT);
-      if (hit) {
-        sv(svg, "circle", { cx, cy: Y(hit.lbs), r: 5, fill: "#C9A227", "fill-opacity": .18 });
-        sv(svg, "circle", { cx, cy: Y(hit.lbs), r: 2.4, fill: "#DCB84A" });
-      }
+    const ty = Y(tgt);
+    sv(svg, "line", { x1: pL, x2: w - pR, y1: ty, y2: ty, class: "wt-goal" });
+    sv(svg, "text", { x: pL, y: ty - 6, class: "wt-lab wt-lab-goal" }).textContent = `GOAL ${tgt}`;
+
+    const pts = es.map(e => ({ x: +X(e.t).toFixed(1), y: +Y(e.lbs).toFixed(1), e }));
+    const curve = smooth(pts);
+    sv(svg, "path", { d: curve + ` L${pts[pts.length - 1].x},${h} L${pts[0].x},${h} Z`, fill: "url(#wt-area)" });
+    sv(svg, "path", { d: curve, class: "wt-line" });
+    if (f && tHit) {
+      const last = pts[pts.length - 1];
+      sv(svg, "path", { d: `M${last.x},${last.y} L${X(tHit).toFixed(1)},${ty}`, class: "wt-proj" });
+      sv(svg, "circle", { cx: X(tHit).toFixed(1), cy: ty, r: 4, class: "wt-hit" });
+    }
+    const last = pts[pts.length - 1];
+    sv(svg, "circle", { cx: last.x, cy: last.y, r: 5, class: "wt-last" });
+
+    const hit = pts.find(p => p.e.t === cursorT);
+    if (hit && hit !== last) {
+      sv(svg, "line", { x1: hit.x, x2: hit.x, y1: pT, y2: h - pB, class: "wt-cur-line" });
+      sv(svg, "circle", { cx: hit.x, cy: hit.y, r: 4, class: "wt-cur" });
+      const left = hit.x > w * 0.7;
+      sv(svg, "text", { x: left ? hit.x - 9 : hit.x + 9, y: Math.max(hit.y - 9, pT + 4),
+        "text-anchor": left ? "end" : "start", class: "wt-lab wt-lab-cur" }).textContent = `${hit.e.lbs.toFixed(1)} · ${fmtShort(hit.e.date)}`;
+    }
+    if (onPick) {
+      const pick = ev => {
+        const r = svg.getBoundingClientRect(); if (!r.width) return;
+        const t = t0 + ((ev.clientX - r.left) / r.width) * (tEnd - t0);
+        let best = es[0];
+        for (const e of es) if (Math.abs(e.t - t) < Math.abs(best.t - t)) best = e;
+        if (best.t !== cursorT) onPick(best.date);
+      };
+      svg.style.touchAction = "pan-y";
+      svg.onpointermove = pick;
+      svg.onpointerdown = pick;
     }
     return svg;
   }
@@ -1783,6 +1827,14 @@ const Weight = (() => {
     } catch (e) { toast("Delete did not reach the repo"); }
     render();
   }
+  async function setTarget(lbs) {
+    doc.target_lbs = lbs; render();
+    try {
+      await push(`weight: goal ${lbs} lbs [site]`);
+      appendActionLog("WROTE", PATH, `goal ${lbs} lbs`);
+    } catch (e) { toast("Goal did not reach the repo"); }
+    render();
+  }
   async function flushPending() {
     const p = readPending();
     if (!p || !doc) return;
@@ -1807,160 +1859,205 @@ const Weight = (() => {
     return loading;
   }
 
-  const getWin = () => { const v = parseInt(localStorage.getItem(WIN_KEY) || "90", 10); return [14, 90, 0].includes(v) ? v : 90; };
+  /* W · M · 6M · Y, as days; 0 would mean "all" but the design has no such stop */
+  const WINS = [["W", 7], ["M", 30], ["6M", 182], ["Y", 365]];
+  const getWin = () => { const v = parseInt(localStorage.getItem(WIN_KEY) || "30", 10); return WINS.some(w => w[1] === v) ? v : 30; };
   const setWin = v => { try { localStorage.setItem(WIN_KEY, String(v)); } catch (_) {} };
   function render() { views.forEach(v => { try { v(); } catch (_) {} }); }
 
-  /* ---- one card ---- */
+  /* ---- one card: Claude Design "Weight Card Minimal Variations" 5a ---- */
   function build(host, chartH) {
-    const card = el(host, "div", "wcard");
-    const head = el(card, "div", "whead");
-    const step = el(head, "div", "wstep");
-    const prev = el(step, "button", "warw", "‹"); prev.type = "button"; prev.setAttribute("aria-label", "Previous reading");
-    /* The arrows only visit days that HAVE readings, so on their own they can
-       never reach a blank day — and reaching a blank day IS the backfill path
-       (shaping D-4 / rabbit hole 5). A native date input, transparent over the
-       label, gives every date including empty ones for free: real picker on
-       phone, keyboard-accessible, no custom calendar to build or maintain. */
-    const dayWrap = el(step, "span", "wdaywrap");
-    const dayBtn = el(dayWrap, "span", "wday");
-    const dayIn = el(dayWrap, "input", "wdate");
-    dayIn.type = "date"; dayIn.setAttribute("aria-label", "Pick a date to log or edit");
-    const next = el(step, "button", "warw", "›"); next.type = "button"; next.setAttribute("aria-label", "Next reading");
-    const val  = el(head, "div", "wval");
-    const info = el(head, "div", "winfo");
-    const range = el(head, "div", "wrange");
-    const msg  = el(card, "div", "wmsg");
-    const chartHost = el(card, "div", "wchart");
+    const root = el(host, "div", "wt");
+    /* top row: title, date, segmented range */
+    const top = el(root, "div", "wt-top");
+    const tl = el(top, "div", "wt-tl");
+    el(tl, "span", "wt-title", "Weight");
+    const topDate = el(tl, "span", "wt-date");
+    const seg = el(top, "div", "wt-seg");
+    const segBtns = WINS.map(([lab, v]) => { const b = el(seg, "button", "wt-segbtn", lab); b.type = "button";
+      b.onclick = () => { win = v; setWin(v); render(); }; return { b, v }; });
+
+    const grid = el(root, "div", "wt-grid");
+    const main = el(grid, "div", "wt-card wt-main");
+    const stats = el(main, "div", "wt-stats");
+    const stat = (label, cls) => { const s = el(stats, "div", "wt-stat" + (cls ? " " + cls : "")); el(s, "span", "wt-k", label);
+      const v = el(s, "div", "wt-v"); return { s, v, k: s.firstChild }; };
+    const sNow = stat("Current"), sAvg = stat("7-day avg"), sRate = stat("Trend"), sEta = stat("", "wt-stat-goal");
+    const chartHost = el(main, "div", "wt-chart");
+    const cap = el(main, "div", "wt-cap");
+
+    const side = el(grid, "div", "wt-side");
+    const today = el(side, "div", "wt-card wt-today");
+    const th = el(today, "div", "wt-th");
+    const thl = el(th, "div", "wt-thl");
+    const thTitle = el(thl, "span", "wt-tt");
+    /* the date is a real date input laid transparently over its label: that
+       is the backfill path (shaping D-4) — pick any day, including a blank one */
+    const thDateWrap = el(thl, "span", "wt-tdwrap");
+    const thDate = el(thDateWrap, "span", "wt-td");
+    const dayIn = el(thDateWrap, "input", "wt-tdin"); dayIn.type = "date"; dayIn.setAttribute("aria-label", "Pick a day to log or edit");
+    const tick = el(th, "span", "wt-tick", "✓");
+    const body = el(today, "div", "wt-tb");
+    const msg = el(today, "div", "wt-msg");
+
+    const goal = el(side, "div", "wt-card wt-goal");
+    const row = (label) => { const r = el(goal, "div", "wt-row"); el(r, "span", "wt-rk", label); const v = el(r, "span", "wt-rv"); return { r, v }; };
+    const rGoal = row("Goal"), rRem = row("Remaining"), rNeed = row("Plan needs");
+    rGoal.r.classList.add("wt-row-btn"); rGoal.r.setAttribute("role", "button"); rGoal.r.tabIndex = 0;
+    rGoal.r.title = "Change the goal";
 
     const TODAY = todayISO();
     let cursor = TODAY, win = getWin();
-    let editing = false, draft = "", err = "", confirmVal = null, wantFocus = false;
-
-    const rangeBtns = [["14d", 14], ["90d", 90], ["All", 0]].map(([lab, v]) => {
-      const b = el(range, "button", "wrbtn", lab); b.type = "button";
-      b.onclick = () => { win = v; setWin(v); render(); };
-      return { b, v };
-    });
+    let editing = false, draft = 0, err = "", confirmVal = null, wantFocus = false, goalEditing = false;
 
     function beginEdit() {
-      const on = rows().find(e => e.date === cursor);
-      editing = true; draft = on ? String(on.lbs) : ""; err = ""; confirmVal = null; wantFocus = true; paint();
+      const es = rows(), on = es.find(e => e.date === cursor);
+      const near = es.filter(e => e.t <= T(cursor)).pop() || es[es.length - 1];
+      editing = true; draft = on ? on.lbs : (near ? near.lbs : 200); err = ""; confirmVal = null; paint();
     }
     function cancelEdit() { editing = false; err = ""; confirmVal = null; paint(); }
     function commit(force) {
       const es = rows();
-      const v = parseFloat(String(draft).trim());
-      if (!isFinite(v)) { err = "Enter a number, e.g. 207.2"; confirmVal = null; paint(); return; }
+      const v = Math.round(parseFloat(draft) * 10) / 10;
+      if (!isFinite(v)) { err = "Enter a number, e.g. 204.1"; confirmVal = null; paint(); return; }
       if (v < MIN_LBS || v > MAX_LBS) {
-        err = v.toFixed(1) + " is outside " + MIN_LBS + "–" + MAX_LBS + " lbs — check the number";
+        err = v.toFixed(1) + " is outside " + MIN_LBS + "–" + MAX_LBS + " lb — check the number";
         confirmVal = null; paint(); return;
       }
       const others = es.filter(e => e.date !== cursor);
       const ref = others.length ? headline(others, T(cursor)) : null;
       if (!force && ref != null && Math.abs(v - ref) > DEV_LBS) { confirmVal = v; err = ""; paint(); return; }
       editing = false; err = ""; confirmVal = null;
-      save(cursor, Math.round(v * 10) / 10);
+      save(cursor, v);
     }
 
     function paint() {
-      const es = rows(), cT = T(cursor);
-      const before = es.filter(e => e.t < cT), after = es.filter(e => e.t > cT);
-      prev.disabled = !before.length; next.disabled = !after.length;
-      /* arrows move between days that HAVE readings: at weekly cadence, one
-         calendar day per tap is six dead taps between Mondays */
-      prev.onclick = () => { if (before.length) { cursor = before[before.length - 1].date; editing = false; paint(); } };
-      next.onclick = () => { if (after.length) { cursor = after[0].date; editing = false; paint(); } };
-      dayBtn.textContent = cursor === TODAY ? "TODAY · " + fmtShort(cursor).toUpperCase() : fmtDay(cursor);
-      dayBtn.dataset.today = cursor === TODAY ? "1" : "0";
-      dayBtn.title = "Pick any day — including one with no reading yet";
-      dayIn.value = cursor; dayIn.max = TODAY;   /* no weighing in the future */
-      dayIn.onchange = () => { if (dayIn.value) { cursor = dayIn.value; editing = false; err = ""; confirmVal = null; paint(); } };
-
-      rangeBtns.forEach(r => r.b.dataset.on = r.v === win ? "1" : "0");
-      const view = win === 0 ? es : es.filter(e => T(TODAY) - e.t <= win * DAY);
-      const upto = es.filter(e => e.t <= cT);
+      const es = rows(), cT = T(cursor), tgt = target(), last = es[es.length - 1] || null;
+      const view = es.filter(e => T(TODAY) - e.t <= win * DAY);
+      const f = canFit(view) ? fit(view) : null;
+      const tHit = (f && view.length) ? eta(f, view[view.length - 1].t, tgt) : null;
       const onDay = es.find(e => e.date === cursor);
-      const r = readout(upto.length ? upto : es, cT);
       const pend = readPending();
 
-      val.textContent = ""; info.textContent = ""; msg.textContent = "";
-      const oldActs = head.querySelector(".wacts"); if (oldActs) oldActs.remove();
+      topDate.textContent = fmtLong(TODAY);
+      segBtns.forEach(s => s.b.dataset.on = s.v === win ? "1" : "0");
 
+      /* stats */
+      sNow.v.textContent = ""; sAvg.v.textContent = ""; sRate.v.textContent = ""; sEta.v.textContent = "";
+      if (last) { el(sNow.v, "span", "wt-n", last.lbs.toFixed(1)); el(sNow.v, "span", "wt-u", "lb"); }
+      else el(sNow.v, "span", "wt-n wt-dim", "—");
+      const avg = headline(es);
+      if (avg != null) { el(sAvg.v, "span", "wt-n", avg.toFixed(1)); el(sAvg.v, "span", "wt-u", "lb"); }
+      else el(sAvg.v, "span", "wt-n wt-dim", "—");
+      if (f) { const wk = f.b * 7; const n = el(sRate.v, "span", "wt-n", sign(wk)); n.dataset.dir = wk < -0.05 ? "down" : wk > 0.05 ? "up" : "none"; el(sRate.v, "span", "wt-u", "lb/wk"); }
+      else el(sRate.v, "span", "wt-n wt-dim", "—");
+      sEta.k.textContent = `Goal ${tgt} lb`;
+      el(sEta.v, "span", "wt-n wt-eta", tHit ? fmtShort(isoOf(tHit)) : "—");
+
+      /* chart */
+      chartHost.textContent = "";
+      if (view.length >= 2) chartHost.appendChild(chart(view, chartH, chartHost.clientWidth || 720, tgt, cT, f, tHit,
+        d => { if (!editing) { cursor = d; paint(); } }));
+      else el(chartHost, "div", "wt-empty", es.length ? "No readings in this range" : "No readings yet");
+      cap.textContent = "";
+      if (last) {
+        const toGo = last.lbs - tgt;
+        if (tHit) { cap.append("Projected to reach your goal "); el(cap, "b", null, fmtShort(isoOf(tHit))); cap.append(` · ${toGo.toFixed(1)} lb to go`); }
+        else if (f && toGo > 0) cap.append(`Not on trend for ${tgt} at this pace · ${toGo.toFixed(1)} lb to go`);
+        else if (toGo <= 0) cap.append(`At goal · ${Math.abs(toGo).toFixed(1)} lb under`);
+        else cap.append(`Need ${MIN_N} readings over ${MIN_SPAN} days in this range for a trend · ${toGo.toFixed(1)} lb to go`);
+      }
+
+      /* today / picked day */
+      const isToday = cursor === TODAY;
+      thTitle.textContent = isToday ? "Today" : fmtDay(cursor);
+      thDate.textContent = (isToday ? fmtDay(cursor) : "picked day") + " · " + (onDay ? onDay.lbs.toFixed(1) + " lb" : "No data");
+      dayIn.value = cursor; dayIn.max = TODAY;   /* no weighing in the future */
+      dayIn.onchange = () => { if (dayIn.value) { cursor = dayIn.value; editing = false; err = ""; confirmVal = null; paint(); } };
+      tick.style.display = onDay ? "" : "none";
+      body.textContent = ""; msg.textContent = "";
       if (editing) {
-        range.style.display = "none";
-        const inp = document.createElement("input");
-        inp.className = "winput"; inp.value = draft; inp.setAttribute("inputmode", "decimal");
+        const step = el(body, "div", "wt-step");
+        const minus = el(step, "button", "wt-pm", "−"); minus.type = "button"; minus.setAttribute("aria-label", "Down " + STEP);
+        const mid = el(step, "div", "wt-draft");
+        /* the number is typeable — twenty taps of ± for a two-pound miss is not a flow */
+        const inp = el(mid, "input", "wt-draftin"); inp.value = Number(draft).toFixed(1); inp.setAttribute("inputmode", "decimal");
         inp.setAttribute("aria-label", "Weight in pounds for " + cursor);
-        inp.placeholder = "207.2";
         inp.oninput = e => { draft = e.target.value; };
         inp.onkeydown = e => {
           if (e.key === "Enter") { e.preventDefault(); commit(confirmVal != null); }
           if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
         };
-        val.appendChild(inp);
-        el(val, "span", "wunit", "lbs");
-        const acts = el(head, "div", "wacts");
-        const sb = el(acts, "button", "wact primary", "Save"); sb.type = "button"; sb.onclick = () => commit(confirmVal != null);
-        const cb = el(acts, "button", "wact", "Cancel"); cb.type = "button"; cb.onclick = cancelEdit;
-        if (onDay) { const db = el(acts, "button", "wact danger", "Delete"); db.type = "button";
+        el(mid, "span", "wt-u", "lb");
+        const plus = el(step, "button", "wt-pm", "+"); plus.type = "button"; plus.setAttribute("aria-label", "Up " + STEP);
+        const nudge = d => { const v = parseFloat(draft); draft = (isFinite(v) ? Math.round((v + d) * 10) / 10 : d).toFixed(1); confirmVal = null; err = ""; paint(); };
+        minus.onclick = () => nudge(-STEP); plus.onclick = () => nudge(STEP);
+        const acts = el(body, "div", "wt-acts");
+        const cb = el(acts, "button", "wt-btn", "Cancel"); cb.type = "button"; cb.onclick = cancelEdit;
+        const sb = el(acts, "button", "wt-btn wt-primary", "Save"); sb.type = "button"; sb.onclick = () => commit(confirmVal != null);
+        if (onDay) { const db = el(body, "button", "wt-del", "Delete this reading"); db.type = "button";
           db.onclick = () => { editing = false; remove(cursor); }; }
-
-        if (err) el(msg, "div", "werr", err);
+        if (err) el(msg, "div", "wt-err", err);
         else if (confirmVal != null) {
-          const others = es.filter(e => e.date !== cursor);
-          const ref = headline(others, cT);
-          const cf = el(msg, "div", "wconfirm");
-          el(cf, "span", null, confirmVal.toFixed(1) + " is " + Math.abs(confirmVal - ref).toFixed(1)
-            + " lbs off your recent average. Save anyway?");
-          const y = el(cf, "button", "wact primary", "Save it"); y.type = "button"; y.onclick = () => commit(true);
-        } else el(msg, "div", "whint", "Enter saves · Esc cancels");
-
-      } else {
-        range.style.display = "";
-        if (!onDay) {
-          const b = el(val, "button", "wslot"); b.type = "button";
-          b.textContent = cursor === TODAY ? "Log this morning" : "Add " + fmtShort(cursor);
-          b.onclick = beginEdit;
-          const near = upto[upto.length - 1];
-          el(info, "span", "wmeta", near ? "last " + near.lbs.toFixed(1) + " · " + fmtShort(near.date) : "no readings yet");
-        } else {
-          /* the number IS the control, so logging, correcting and backfilling
-             are one gesture rather than three features */
-          const mb = el(val, "button", "wmoney"); mb.type = "button";
-          mb.setAttribute("aria-label", "Edit weight for " + cursor);
-          el(mb, "span", "wnum", onDay.lbs.toFixed(1));
-          el(mb, "span", "wunit", "lbs");
-          el(mb, "span", "wpencil", "edit");
-          mb.onclick = beginEdit;
-          if (r.kind === "rate") {
-            const q = el(info, "span", "wrate", sign(r.wk) + " lbs/wk");
-            q.dataset.dir = r.wk < -0.05 ? "down" : r.wk > 0.05 ? "up" : "none";
-          } else if (r.kind === "delta" && es.length > 1) {
-            const q = el(info, "span", "wrate", sign(r.delta) + " in " + Math.round(r.days) + "d");
-            q.dataset.dir = r.delta < 0 ? "down" : "none";
-          }
-          if (info.childNodes.length) el(info, "span", "wsep", "·");
-          el(info, "span", "wmeta", "avg " + r.avg.toFixed(1));
-          if (cursor !== TODAY) { el(info, "span", "wsep", "·"); el(info, "span", "wmeta wstale", fmtShort(cursor)); }
+          const ref = headline(es.filter(e => e.date !== cursor), cT);
+          const cf = el(msg, "div", "wt-confirm");
+          el(cf, "span", null, confirmVal.toFixed(1) + " is " + Math.abs(confirmVal - ref).toFixed(1) + " lb off your recent average. Save anyway?");
+          const y = el(cf, "button", "wt-btn wt-primary", "Save it"); y.type = "button"; y.onclick = () => commit(true);
         }
-        if (pend) { el(info, "span", "wsep", "·"); el(info, "span", "wmeta wstale", "not synced"); }
+      } else {
+        const b = el(body, "button", "wt-btn wt-log" + (onDay ? "" : " wt-primary")); b.type = "button";
+        b.textContent = onDay ? (isToday ? "Edit Today's Weight" : "Edit " + fmtShort(cursor)) : (isToday ? "Log Weight" : "Log " + fmtShort(cursor));
+        b.onclick = beginEdit;
+        if (!isToday) { const back = el(body, "button", "wt-del", "Back to today"); back.type = "button";
+          back.onclick = () => { cursor = TODAY; paint(); }; }
+        if (pend) el(msg, "div", "wt-err", "Saved on this device — not synced yet");
       }
 
-      chartHost.textContent = "";
-      if (view.length >= 2) chartHost.appendChild(chart(view, chartH, cT));
+      /* goal list */
+      rGoal.v.textContent = "";
+      if (goalEditing) {
+        const gi = el(rGoal.v, "input", "wt-goalin"); gi.type = "number"; gi.step = "0.5"; gi.min = MIN_LBS; gi.max = MAX_LBS; gi.value = tgt;
+        gi.setAttribute("aria-label", "Goal weight in pounds");
+        const done = () => { goalEditing = false; const v = Math.round(parseFloat(gi.value) * 10) / 10;
+          if (isFinite(v) && v >= MIN_LBS && v <= MAX_LBS && v !== tgt) setTarget(v); else paint(); };
+        gi.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); done(); } if (e.key === "Escape") { e.preventDefault(); goalEditing = false; paint(); } };
+        gi.onblur = done;
+        wantFocus = ".wt-goalin";
+        rGoal.r.onclick = null;
+      } else {
+        rGoal.v.textContent = `${tgt} lb ›`;
+        rGoal.r.onclick = () => { goalEditing = true; paint(); };
+        rGoal.r.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goalEditing = true; paint(); } };
+      }
+      rRem.v.textContent = last ? `${(last.lbs - tgt).toFixed(1)} lb` : "—";
+      const pd = planDate();
+      rNeed.v.dataset.tone = "";
+      if (last && pd) {
+        const daysLeft = Math.round((T(pd) - T(TODAY)) / DAY);
+        if (daysLeft > 0) { const need = (last.lbs - tgt) / (daysLeft / 7);
+          rNeed.v.textContent = `${need.toFixed(1)} lb/wk · ${daysLeft}d left`; rNeed.v.dataset.tone = need > 2 ? "warn" : "ok"; }
+        else rNeed.v.textContent = `${fmtShort(pd)} passed`;
+        rNeed.r.title = `Plan date ${pd} — target_date in weight-log.json`;
+      } else rNeed.v.textContent = "no plan date";
 
-      if (wantFocus) { wantFocus = false;
-        const i = card.querySelector(".winput"); if (i) { i.focus(); i.select(); } }
+      if (editing && wantFocus !== ".wt-goalin") wantFocus = ".wt-draftin";
+      if (wantFocus) { const i = root.querySelector(wantFocus); wantFocus = false; if (i && document.activeElement !== i) { i.focus(); if (i.select) i.select(); } }
     }
     views.push(paint);
     paint();
+    /* the SVG is sized to the host in pixels so labels keep their shape; redraw
+       when the card changes width (first layout, rotate, resize) */
+    if (window.ResizeObserver) {
+      let lastW = chartHost.clientWidth;
+      new ResizeObserver(() => { const cw = chartHost.clientWidth; if (cw && cw !== lastW) { lastW = cw; paint(); } })
+        .observe(chartHost);
+    }
   }
 
   async function mount(host, opts) {
     if (!host) return;
     try { await load(); } catch (e) { return; }   /* never block the host view */
-    build(host, (opts && opts.chartH) || 60);
+    build(host, (opts && opts.chartH) || 220);
   }
   return { mount };
 })();
@@ -2575,7 +2672,7 @@ const Workout = (() => {
     /* bodyweight card — same component the Diet view mounts (shaping D-2/D-4).
        Between the header rule and the day tabs: the tabs are plan slots and
        carry no date, so the card brings its own dated stepper. */
-    Weight.mount(el(root, "div", "wmount"), { chartH: 60 });
+    Weight.mount(el(root, "div", "wmount"), { chartH: 220 });
 
     const tabs = el(root, "div", "tabs");
     tabEls = [];
@@ -3048,7 +3145,7 @@ const Food = (() => {
     const hrEl = hdr.createDiv({ cls: "hr" });
     hrEl.createDiv({ cls: "targetline", text: `target ${MEAL_TARGET.cal} cal · ${MEAL_TARGET.p}g protein · ${TARGETS.meals_per_day} meals / day` });
 
-    Weight.mount(wrap.createDiv({ cls: "wmount" }), { chartH: 60 });
+    Weight.mount(wrap.createDiv({ cls: "wmount" }), { chartH: 150 });
 
     const filtersEl = wrap.createDiv({ cls: "filters" });
     const layout = wrap.createDiv({ cls: "layout" });
