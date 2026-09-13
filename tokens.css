@@ -72,13 +72,6 @@
   --pad-card:11px 15px; --pad-lane:9px 12px;
   --gap-card:6px; --gap-block:13px; --gap-section:20px;
   --gutter:22px; --gutter-sm:14px;
-  /* movement grid (Workout): a card never goes narrower than --mc-min, and a
-     block never runs more than --mc-cols-max across. health.css derives the
-     column count from these two; nothing else declares a column number. */
-  --mc-min:340px; --mc-cols-max:3;
-  /* and never wider than --mc-max: on a wide monitor a two-card superset was
-     stretching each card past 950px with a 190px-tall banner on top */
-  --mc-max:720px;
   /* ============================================================
      TYPE — the single source of truth for the whole file.
      Four families, one job each:
