@@ -154,10 +154,16 @@ async function saveJSON(path, mutate, message) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     const cur = await readFile(path);
     const data = cur ? cur.data : {};
-    if (cur) shaMap.set(path, cur.sha);
     const next = mutate(structuredClone(data));
     try {
-      await writeRaw(path, JSON.stringify(next, null, 2) + "\n", message);
+      // One CAS attempt only. A conflict must rerun mutate against fresh data;
+      // writeRaw's internal retry would send the old payload with a new SHA.
+      const body = { message, content: b64encode(JSON.stringify(next, null, 2) + "\n") };
+      if (cur) body.sha = cur.sha;
+      const res = await gh(`contents/${path}`, { method: "PUT", body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(`GitHub ${res.status} writing ${path}`);
+      const saved = await res.json();
+      shaMap.set(path, saved.content.sha);
       return next;
     } catch (e) {
       if (attempt === 3) throw e;
@@ -2082,6 +2088,40 @@ const Weight = (() => {
    Same files, same entry schema; the PC widget and /workout-review
    read what this writes. Append-only log: one JSON per movement/day.
    ==================================================================== */
+// WORKOUT_OUTBOX_START — persisted before network I/O, one writer per browser.
+function createWorkoutOutbox(storage, key, save, saved, failed) {
+  const pending = new Map(JSON.parse(storage.getItem(key) || "[]"));
+  let flushing = null;
+  const persist = () => storage.setItem(key, JSON.stringify([...pending]));
+  return {
+    pending,
+    enqueue(id, value) {
+      const previous = pending.get(id);
+      pending.set(id, value);
+      try { persist(); }
+      catch (e) { if (previous) pending.set(id, previous); else pending.delete(id); throw e; }
+    },
+    flush() {
+      if (flushing) return flushing;
+      flushing = (async () => {
+        for (const [id, value] of [...pending]) {
+          try {
+            const result = await save(value);
+            // Edits made during the request remain queued as a newer object.
+            if (pending.get(id) === value) {
+              pending.delete(id);
+              try { persist(); } catch (e) { pending.set(id, value); throw e; }
+            }
+            saved(value, result);
+          } catch (e) { failed(value, e); }
+        }
+        return pending.size === 0;
+      })().finally(() => { flushing = null; });
+      return flushing;
+    }
+  };
+}
+// WORKOUT_OUTBOX_END
 const Workout = (() => {
   const WEEK_PATH     = "orgs/health/data/workout/workout-week.json";
   const LOG_DIR       = "orgs/health/data/workout/workout-log";
@@ -2175,81 +2215,71 @@ const Workout = (() => {
     return hit ? WW[hit] : null;
   }
 
-  /* ---- saves: append-only entry files, committed through the rails ---- */
-  const pending = new Map(); let saveTimer = null;
-  function queueSave(dayKey, exercise, patch) {
-    const k = entryKey(DATE, dayKey, exercise);
-    const cur = pending.get(k) || { ...(logIndex.get(k) || { done: false, weight: "", reps: "", time: "" }) };
-    pending.set(k, { ...cur, ...patch, _day: dayKey, _ex: exercise, _gear: gear });
+  /* ---- durable saves; identity includes date and repo, never the PAT ---- */
+  let outbox = null, saveTimer = null;
+  function ensureOutbox() {
+    if (outbox) return outbox;
+    const repo = store.repo;
+    outbox = createWorkoutOutbox(localStorage, `wkt-outbox:${repo}`, async value => {
+      if (store.repo !== repo) throw new Error("Repo changed; reconnect the original repo to retry");
+      if (value.kind === "movement") {
+        return saveJSON(value.path, cur => ({ done: false, weight: "", reps: "", time: "", ...cur, ...value.patch,
+          date: value.date, day: value.day, exercise: value.exercise }), `workout: log ${value.exercise} ${value.date} [site]`);
+      }
+      return saveJSON(value.path, cur => {
+        const merged = { ...cur };
+        if (value.value) merged[value.key] = value.value; else delete merged[value.key];
+        return merged;
+      }, `workout: ${value.kind} ${value.key} [site]`);
+    }, (value, result) => {
+      if (value.kind === "movement") {
+        const k = entryKey(value.date, value.day, value.exercise);
+        const current = { ...result, ...(outbox.pending.get(k)?.patch || {}) };
+        logIndex.set(k, current);
+        log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k).concat([current]);
+      }
+      syncDotFlash(true);
+    }, (_value, e) => {
+      console.warn("[workout] retained for retry", e);
+      toast("Workout change saved on this device; sync will retry");
+      syncDotFlash(false);
+    });
+    window.addEventListener("online", () => flushSaves());
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) flushSaves(); });
+    return outbox;
+  }
+  function enqueue(id, value) {
+    try { ensureOutbox().enqueue(id, value); }
+    catch (e) { toast("Device storage failed — this change is NOT saved. Keep this page open."); throw e; }
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(flushSaves, 600);
   }
+  function queueSave(dayKey, exercise, patch) {
+    const k = entryKey(DATE, dayKey, exercise);
+    const existing = ensureOutbox().pending.get(k);
+    enqueue(k, { kind: "movement", path: entryPath(DATE, dayKey, exercise),
+      date: DATE, day: dayKey, exercise,
+      patch: { ...(existing?.patch || {}), ...patch, gear } });
+  }
   async function flushSaves() {
+    if (saveTimer) clearTimeout(saveTimer);
     saveTimer = null;
-    if (pending.size === 0) return;
-    const batch = new Map(pending);
-    pending.clear();
-    for (const [k, p] of batch) {
-      const exName = p._ex;
-      const entry = {
-        date: DATE, day: p._day, exercise: exName,
-        done: !!p.done, weight: p.weight ?? "", reps: p.reps ?? "", time: p.time ?? "",
-        gear: p._gear || gear,
-      };
-      const fpath = entryPath(DATE, p._day, exName);
-      const empty = !entry.done && !entry.weight && !entry.reps && !entry.time;
-      try {
-        if (empty) {
-          await deleteFile(fpath, `workout: clear ${exName} ${DATE} [site]`);
-          logIndex.delete(k);
-          log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k);
-        } else {
-          await writeRaw(fpath, JSON.stringify(entry, null, 2) + "\n", `workout: log ${exName} ${DATE} [site]`);
-          logIndex.set(k, entry);
-          log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k).concat([entry]);
-        }
-        syncDotFlash(true);
-      } catch (e) {
-        console.warn("[workout] save failed", fpath, e);
-        toast(`Save failed: ${exName} — will need a retry`);
-        syncDotFlash(false);
-      }
-    }
-    /* the PC widget rebuilds workout-log.json (derived cache) from the folder;
-       the site leaves the cache alone — folder entries are the source of truth. */
+    const ok = await ensureOutbox().flush();
+    if (!ok && !saveTimer) saveTimer = setTimeout(flushSaves, 30000);
+    return ok;
   }
   async function writeSessions() {
-    try {
-      sessions = await saveJSON(SESSIONS_PATH, cur => {
-        const merged = (cur && typeof cur === "object") ? cur : {};
-        /* apply our local truth for today's key only — never clobber other days */
-        for (const key of Object.keys(localSessionTouches)) {
-          if (localSessionTouches[key]) merged[key] = true; else delete merged[key];
-        }
-        return merged;
-      }, `workout: session flags ${DATE} [site]`);
-      syncDotFlash(true);
-    } catch (e) {
-      console.warn("[workout] sessions write failed", e);
-      toast("Session flag save failed");
-      syncDotFlash(false);
+    for (const [key, value] of Object.entries(localSessionTouches)) {
+      enqueue(`session:${key}`, { kind: "session", path: SESSIONS_PATH, key, value });
+      delete localSessionTouches[key];
     }
+    return flushSaves();
   }
   const localSessionTouches = {};
   /* free-form feedback per day, keyed like sessions: `${DATE}__${dayKey}` */
   async function writeNote(k, text) {
-    try {
-      notes = await saveJSON(NOTES_PATH, cur => {
-        const merged = (cur && typeof cur === "object") ? cur : {};
-        if (text) merged[k] = text; else delete merged[k];
-        return merged;
-      }, `workout: feedback ${DATE} [site]`);
-      syncDotFlash(true);
-    } catch (e) {
-      console.warn("[workout] note write failed", e);
-      toast("Feedback save failed");
-      syncDotFlash(false);
-    }
+    enqueue(`feedback:${k}`, { kind: "feedback", path: NOTES_PATH, key: k, value: text });
+    notes[k] = text;
   }
   function syncDotFlash(ok) {
     const dot = $("sync-dot");
@@ -2261,29 +2291,36 @@ const Workout = (() => {
     const w = await readFile(WEEK_PATH);
     if (!w || !w.data || !Array.isArray(w.data.days)) throw new Error(`Could not load ${WEEK_PATH}`);
     week = w.data; WW = week.working_weights || {};
-    const cache = await readFile(LOG_PATH);
-    log = (cache && Array.isArray(cache.data)) ? cache.data : [];
-    /* today's entry files are fresher than the cache — overlay them */
+    log = [];
+    /* Read canonical entries for all dates; the desktop cache may be stale. */
     const files = await listDir(LOG_DIR);
-    const todays = files.filter(f => f.name.startsWith(DATE) && f.name.endsWith(".json"));
-    for (const f of todays) {
-      try {
+    for (const f of files.filter(f => f.name.endsWith(".json"))) {
         const e = await readFile(f.path);
+        if (!e) continue;
         shaMap.set(f.path, e.sha);
         if (e.data && e.data.date && e.data.day && e.data.exercise) {
           const k = entryKey(e.data.date, e.data.day, e.data.exercise);
           log = log.filter(x => entryKey(x.date, x.day, x.exercise) !== k).concat([e.data]);
         }
-      } catch (_) {}
     }
     const s = await readFile(SESSIONS_PATH);
     sessions = (s && s.data && typeof s.data === "object") ? s.data : {};
     const n = await readFile(NOTES_PATH);
     notes = (n && n.data && typeof n.data === "object") ? n.data : {};
+    for (const value of ensureOutbox().pending.values()) {
+      if (value.kind === "movement") {
+        const k = entryKey(value.date, value.day, value.exercise);
+        const previous = log.find(e => entryKey(e.date, e.day, e.exercise) === k) || {};
+        log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k).concat([
+          { ...previous, ...value.patch, date: value.date, day: value.day, exercise: value.exercise }]);
+      } else if (value.kind === "session") sessions[value.key] = value.value;
+      else if (value.kind === "feedback") notes[value.key] = value.value;
+    }
     logIndex = new Map();
     for (const e of log) {
       if (e && e.date === DATE && e.day && e.exercise) logIndex.set(entryKey(e.date, e.day, e.exercise), e);
     }
+    if (ensureOutbox().pending.size) saveTimer = setTimeout(flushSaves, 600);
   }
 
   /* ---- UI (ported) ---- */
@@ -2297,30 +2334,6 @@ const Workout = (() => {
     lightbox._img.src = src; lightbox._img.alt = alt || "";
     lightbox._cap.textContent = alt || "";
     lightbox.classList.add("on");
-  }
-
-  function toggleTrend(parent, canon) {
-    const existing = parent.querySelector(".trend");
-    if (existing) { existing.remove(); return; }
-    const pts = historyFor(canon)
-      .map(e => parseFloat(String(e.weight).replace(/[^0-9.]/g, "")))
-      .filter(v => !isNaN(v)).slice(-8);
-    const box = el(parent, "div", "trend");
-    if (pts.length < 2) { el(box, "span", "trendlab", "not enough history yet"); return; }
-    const w = 190, h = 40, pad = 4;
-    const min = Math.min(...pts), max = Math.max(...pts), rng = (max - min) || 1;
-    const X = i => pad + i * (w - 2 * pad) / (pts.length - 1);
-    const Y = v => h - pad - ((v - min) / rng) * (h - 2 * pad);
-    const d = pts.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-    const NS = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("viewBox", `0 0 ${w} ${h}`); svg.setAttribute("width", w); svg.setAttribute("height", h);
-    const path = document.createElementNS(NS, "path");
-    path.setAttribute("d", d); path.setAttribute("fill", "none");
-    path.setAttribute("stroke", "var(--gold)"); path.setAttribute("stroke-width", "1.5");
-    path.setAttribute("stroke-linejoin", "round"); path.setAttribute("stroke-linecap", "round");
-    svg.appendChild(path); box.appendChild(svg);
-    el(box, "span", "trendlab", `${min}→${max} kg · ${pts.length} logs`);
   }
 
   function startHold(dayKey, canon, sec, btn) {
@@ -2462,58 +2475,48 @@ const Workout = (() => {
     return bar;
   }
 
+  /* one card, three bodies (Claude Design "Workout Focus", Plan frame):
+       full  — banner, name + target, cues on one line, weight/reps inputs (the lifts)
+       hold/check/none — banner, name over target, hold or rest button on the right
+       row   — thumbnail + name over target + rest, for the warm-up list */
   function movementCard(parent, dayKey, item, opts) {
     const canon = cleanName(item.n);
     const meta  = resolveMovement(item.n) || {};
     const mode  = item.log || opts.mode || "check";
     const saved = logIndex.get(entryKey(DATE, dayKey, canon)) || {};
 
-    const card = el(parent, "div", "mc");
+    const card = el(parent, "div", "mc" + (opts.row ? " mcrow" : ""));
     const fig = el(card, "div", "mcfig");
     const imgPath = Array.isArray(meta.form) ? meta.form[0] : meta.form;
+    const ph = el(fig, "div", "mcph", `${canon} — form`);
     if (imgPath) {
-      const img = el(fig, "img");
-      img.alt = `${canon} form`; img.loading = "lazy";
-      imageURL(imgPath)
-        .then(u => { img.src = u; img.onclick = () => openLightbox(u, canon); })
-        .catch(() => { fig.textContent = ""; el(fig, "div", "mcph", "form pic"); });
-    } else {
-      el(fig, "div", "mcph", "form pic");
+      imageURL(imgPath).then(u => {
+        ph.remove();
+        const img = el(fig, "img"); img.src = u; img.alt = `${canon} form`; img.loading = "lazy";
+        fig.onclick = () => openLightbox(u, canon);
+      }).catch(() => {});
     }
 
-    const body = el(card, "div", "mcbody");
-    const head = el(body, "div");
-    el(head, "div", "mcname", item.n);
-
+    const body = el(card, "div", "mcbody" + (mode === "full" ? "" : " row"));
+    const head = el(body, "div", "mchead");
+    el(head, "div", "mcname", canon);
     const load = item.l || meta.load || "";
     const reps = item.r || meta.reps || "";
-    const mline = el(head, "div", "mcmeta");
-    if (meta.equipment) el(mline, "span", null, meta.equipment);
-    if (item.rounds) el(mline, "span", "mcrx", roundLabel(item.rounds));
     const showLoad = load && !/^bodyweight$/i.test(load.trim());
     const rx = [showLoad ? load : "", reps].filter(Boolean).join(" × ");
-    if (rx) el(mline, "span", "mcrx", rx);
-
-    if (Array.isArray(meta.cues) && meta.cues.length) {
-      const cw = el(body, "div");
-      const ul = el(cw, "ul", "mccues");
-      meta.cues.forEach((q, i) => {
-        const li = el(ul, "li", "mccue");
-        el(li, "span", "mccuen", String(i + 1).padStart(2, "0"));
-        el(li, "span", null, q);
-      });
-    }
+    if (rx) el(head, "span", "mcrx" + (/calibrate/i.test(rx) ? " warn" : ""), rx);
 
     if (mode === "full") {
+      if (Array.isArray(meta.cues) && meta.cues.length) el(body, "div", "mccueline", meta.cues.join(" · "));
       const last = lastLogged(canon);
       const ctrl = el(body, "div", "mcctrl");
-      const wf = el(ctrl, "div", "field");
-      el(wf, "span", "fieldlab", "Weight (kg)");
+      const wf = el(ctrl, "label", "field");
+      el(wf, "span", "fieldlab", "Weight kg");
       const wIn = el(wf, "input", "inp");
       wIn.type = "text"; wIn.inputMode = "decimal"; wIn.placeholder = "—";
       wIn.value = (saved.weight != null && saved.weight !== "") ? saved.weight
                 : (last && last.weight ? last.weight : numFrom(load));
-      const rf = el(ctrl, "div", "field");
+      const rf = el(ctrl, "label", "field reps");
       el(rf, "span", "fieldlab", "Reps");
       const rIn = el(rf, "input", "inp");
       rIn.type = "text"; rIn.inputMode = "numeric"; rIn.placeholder = "—";
@@ -2521,23 +2524,16 @@ const Workout = (() => {
                 : (last && last.reps ? last.reps : numFrom(reps));
       const push = () => queueSave(dayKey, canon, { weight: wIn.value.trim(), reps: rIn.value.trim() });
       for (const i of [wIn, rIn]) { i.addEventListener("change", push); i.addEventListener("blur", push); }
-      const foot = el(body, "div", "mcfoot");
-      if (last) el(foot, "span", null, `last ${last.weight || "—"}${last.reps ? ` × ${last.reps}` : ""}`);
-      if (historyFor(canon).length > 1) {
-        const dots = el(foot, "span", "dots", "· · ·");
-        dots.onclick = () => toggleTrend(body, canon);
-      }
       if (opts.rest) restButton(body, opts.rest);
     } else if (mode === "hold") {
       const sec = parseSeconds(item.r) ?? parseSeconds(meta.reps);
-      const ctrl = el(body, "div", "mcctrl");
       if (sec) {
-        const btn = el(ctrl, "button", "hold", saved.time ? `✓ ${saved.time}` : `▶ ${sec}s`);
+        const btn = el(body, "button", "hold", saved.time ? `✓ ${saved.time}` : `▶ ${sec}s`);
         btn._idle = btn.textContent;
         if (saved.time) btn.classList.add("fin");
         btn.onclick = () => startHold(dayKey, canon, sec, btn);
       } else {
-        el(ctrl, "span", "trendlab", "timed hold — no duration parsed");
+        el(body, "span", "trendlab", "timed hold — no duration parsed");
       }
     } else if (opts.rest) {
       restButton(body, opts.rest);
@@ -2546,7 +2542,7 @@ const Workout = (() => {
   }
 
   function movementGrid(parent, dayKey, items, opts) {
-    const grid = el(parent, "div", "grid");
+    const grid = el(parent, "div", opts.row ? "rows" : `grid c${opts.cols || 2}`);
     (items || []).forEach((it, i) => movementCard(grid, dayKey, it, { ...opts, index: i }));
     return grid;
   }
@@ -2577,10 +2573,9 @@ const Workout = (() => {
     const ta = el(box, "textarea");
     ta.placeholder = "Feedback — what felt light, what felt heavy, any niggles";
     ta.value = notes[k] || "";
-    let t = null;
-    const save = () => { t = null; const v = ta.value.trim(); if (v !== (notes[k] || "")) writeNote(k, v); };
-    ta.oninput = () => { if (t) clearTimeout(t); t = setTimeout(save, 1200); };
-    ta.onblur  = () => { if (t) { clearTimeout(t); save(); } };
+    // Persist each keystroke locally; only the network flush is debounced.
+    ta.oninput = () => writeNote(k, ta.value.trim());
+    ta.onblur = () => flushSaves();
   }
   function sessionBar(parent, dayKey) {
     const bar = el(parent, "div", "sessionbar");
@@ -2646,7 +2641,7 @@ const Workout = (() => {
     return steps;
   }
   const rxOf = s => {
-    const load = s.item.l || s.meta.load || "", reps = s.item.r || s.meta.reps || "";
+    const load = s.item.load_override ?? s.meta.load ?? s.item.l ?? "", reps = s.item.r || s.meta.reps || "";
     const showLoad = load && !/^bodyweight$/i.test(load.trim());
     return [showLoad ? load : "", reps].filter(Boolean).join(" × ");
   };
@@ -2736,6 +2731,7 @@ const Workout = (() => {
       const plus = el(ctl, "button", "fxpm", "+"); plus.type = "button";
       const bump = k => { const v = parseFloat(inp.value); inp.value = String(Math.max(0, Math.round(((isNaN(v) ? 0 : v) + k * step) * 100) / 100)); onChange(inp.value); };
       minus.onclick = () => bump(-1); plus.onclick = () => bump(1);
+      inp.oninput = () => onChange(inp.value.trim());
       inp.onchange = () => onChange(inp.value.trim());
       return inp;
     }
@@ -2786,7 +2782,7 @@ const Workout = (() => {
         if (last) el(tgt, "span", "fxlast", `last session ${last.weight || "—"}${last.reps ? ` × ${last.reps}` : ""}${last.time ? ` · ${last.time}` : ""}`);
 
         if (s.mode === "full") {
-          const load = s.item.l || s.meta.load || "", reps = s.item.r || s.meta.reps || "";
+          const load = s.item.load_override ?? s.meta.load ?? s.item.l ?? "", reps = s.item.r || s.meta.reps || "";
           const card = el(right, "div", "fxcard");
           const cur = { weight: (saved.weight != null && saved.weight !== "") ? saved.weight : (last && last.weight ? last.weight : numFrom(load)),
                         reps:   (saved.reps   != null && saved.reps   !== "") ? saved.reps   : (last && last.reps   ? last.reps   : numFrom(reps)) };
@@ -2880,7 +2876,7 @@ const Workout = (() => {
          movements, and the section head has claimed 30s all along without
          ever giving you a way to run it */
       const s = sectionHead(host, "Warm-up", `${restSecFor("warmup")}s between`);
-      movementGrid(s, d.key, src.warmup, { section: "Warm-up", mode: defaultLogMode("warmup"), rest: restSecFor("warmup") });
+      movementGrid(s, d.key, src.warmup, { section: "Warm-up", mode: defaultLogMode("warmup"), rest: restSecFor("warmup"), row: true });
     }
     if (src.engine) {
       const s = sectionHead(host, "Engine", "");
@@ -2889,25 +2885,25 @@ const Workout = (() => {
     (src.ss || []).forEach((block, bi) => {
       const r    = room ? (block.rounds ?? showRounds) : showRounds;
       const rest = room ? (block.rest ?? 60) : restSecFor("ss", bi);
-      const s = sectionHead(host, block.label || `Superset ${bi + 1}`, roundLabel(r));
+      const s = sectionHead(host, shortName(block.label || `Superset ${bi + 1}`), `${roundLabel(r)}${rest ? ` · rest ${rest}s` : ""}`);
       setBar(s, `${d.key}|${gear}|ss${bi}`, r, rest);
       /* no per-card rest inside a superset: the paired exercise IS the rest.
          Resting between the two halves turns the pair back into straight sets.
          The only rest that belongs here is the set bar's, after a full round. */
-      movementGrid(s, d.key, block.ex, { section: block.label || "Superset", mode: defaultLogMode("ss") });
+      movementGrid(s, d.key, block.ex, { section: block.label || "Superset", mode: defaultLogMode("ss"), cols: 2 });
     });
     if (Array.isArray(src.finisher) && src.finisher.length) {
       const label = d.type === "engine" && !room ? "Core" : "Finisher";
       const perItem = (src.finisher || []).some(f => f.rounds);
-      const s = sectionHead(host, label, perItem ? "" : roundLabel(showRounds));
+      const s = sectionHead(host, label, perItem ? "" : `${roundLabel(showRounds)} · rest ${restSecFor("finisher")}s`);
       /* per-item rounds means each movement carries its own count, so a single
          block-wide round counter would be lying */
       if (!perItem) setBar(s, `${d.key}|${gear}|fin`, showRounds, restSecFor("finisher"));
-      movementGrid(s, d.key, src.finisher, { section: label, mode: defaultLogMode("finisher"), rest: restSecFor("finisher") });
+      movementGrid(s, d.key, src.finisher, { section: label, mode: defaultLogMode("finisher"), rest: restSecFor("finisher"), cols: 3 });
     }
     if (Array.isArray(src.cool) && src.cool.length) {
-      const s = sectionHead(host, "Cool-down", "");
-      movementGrid(s, d.key, src.cool, { section: "Cool-down", mode: defaultLogMode("cool") });
+      const s = sectionHead(host, "Cool-down", "30s each side");
+      movementGrid(s, d.key, src.cool, { section: "Cool-down", mode: defaultLogMode("cool"), cols: 3 });
     }
     yogaRow(host, d.key);
     const fin = el(host, "div", "fin");
