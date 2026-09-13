@@ -168,7 +168,10 @@ body { min-height:100%; }
 .wkt .trend svg{display:block;margin-top:6px}
 .wkt .trendlab{font-family:var(--mono);font-size:var(--fs-meta);color:var(--faint)}
 .wkt .prose{border:1px solid var(--hairline);background:var(--card);padding:16px 20px;font-size:var(--fs-body);line-height:1.65;color:var(--dim);border-radius:4px}
-.wkt .note{border-left:2px solid var(--gold);background:var(--gold-wash);padding:13px 17px;font-size:var(--fs-body);line-height:1.6;color:var(--dim);margin-bottom:22px}
+.wkt .fb textarea{width:100%;min-height:88px;box-sizing:border-box;resize:vertical;border:1px solid var(--hairline);background:var(--card);
+  color:var(--fg);padding:13px 17px;font-family:inherit;font-size:var(--fs-body);line-height:1.6;border-radius:4px;margin-bottom:22px}
+.wkt .fb textarea:focus{outline:none;border-color:var(--gold-dim)}
+.wkt .fb textarea::placeholder{color:var(--dim)}
 .wkt .jm{border:1px solid var(--hairline);background:var(--card);padding:20px 22px;border-radius:4px}
 .wkt .jmitem{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:6px 0;font-size:var(--fs-body);color:var(--dim);line-height:1.55}
 .wkt .jmn{font-family:var(--mono);font-size:var(--fs-meta);color:var(--gold-dim);padding-top:4px}
