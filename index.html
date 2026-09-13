@@ -2059,7 +2059,18 @@ const Weight = (() => {
     try { await load(); } catch (e) { return; }   /* never block the host view */
     build(host, (opts && opts.chartH) || 220);
   }
-  return { mount };
+  /* the one-line read the Workout Focus sidebar shows: last reading, weekly
+     rate over the chosen window, goal and its projected date. Same math as
+     paint() — nothing here may disagree with the card. */
+  function summary() {
+    const es = rows(); if (!es.length) return null;
+    const last = es[es.length - 1], tgt = target(), win = getWin();
+    const view = es.filter(e => T(todayISO()) - e.t <= win * DAY);
+    const f = canFit(view) ? fit(view) : null;
+    const tHit = (f && view.length) ? eta(f, view[view.length - 1].t, tgt) : null;
+    return { lbs: last.lbs, rate: f ? f.b * 7 : null, tgt, eta: tHit ? fmtShort(isoOf(tHit)) : null };
+  }
+  return { mount, summary };
 })();
 
 /* ====================================================================
@@ -2142,6 +2153,10 @@ const Workout = (() => {
   let DATE = todayISO(), WW = {}, logIndex = new Map();
   let gear = "red", active = 0;
   let holdInterval = null, holdBtn = null;
+  /* Plan is the page you read; Focus is the player you train from — one
+     movement at a time, the rest of the session in a sidebar. */
+  let view = "plan";
+  const VIEW_KEY = "wkt-view", FOCUS_KEY = "wkt-focus";
 
   function historyFor(canon) {
     return log.filter(e => e.exercise === canon && e.date < DATE && (e.weight || e.reps))
@@ -2584,6 +2599,239 @@ const Workout = (() => {
     };
   }
 
+  /* ---- Focus player -------------------------------------------------------
+     The plan flattened into steps: warm-up one pass, each superset R rounds
+     of its pair, finisher R rounds (or per-item rounds), cool-down one pass,
+     then feedback + mark complete. Rest lives on the step that precedes it,
+     so "Done" on the last half of a round runs the between-rounds clock. */
+  const shortName = n => String(n).replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  function buildSteps(d) {
+    const rounds = roundsForGear(gear), showRounds = Math.max(1, rounds);
+    const room = (gear === "room" && week.room_session) ? week.room_session : null;
+    const src = room || d;
+    const steps = [];
+    /* block labels carry gym directions in parentheses — the cards show them, the player does not */
+    const push = (block, label, item, extra) => steps.push({ block, label: shortName(label), item, canon: cleanName(item.n),
+      meta: resolveMovement(item.n) || {}, mode: item.log || defaultLogMode(block), ...extra });
+    if (gear === "blue-r" && d.type === "strength" && d.just_move) {
+      steps.push({ block: "jm", label: "Just move", title: d.just_move.title, items: d.just_move.items || [], mode: "none" });
+      steps.push({ block: "end", label: "Finish", mode: "none" });
+      return steps;
+    }
+    (src.warmup || []).forEach((it, i, a) => push("warmup", "Warm-up", it, { rest: i < a.length - 1 ? restSecFor("warmup") : 0 }));
+    if (src.engine) steps.push({ block: "engine", label: "Engine", prose: src.engine, mode: "none" });
+    (src.ss || []).forEach((blk, bi) => {
+      const r = room ? (blk.rounds ?? showRounds) : showRounds;
+      const rest = room ? (blk.rest ?? 60) : restSecFor("ss", bi);
+      for (let round = 1; round <= r; round++)
+        (blk.ex || []).forEach((it, i, a) => push("ss", blk.label || `Superset ${bi + 1}`, it,
+          { round, rounds: r, pos: i + 1, of: a.length, rest: (i === a.length - 1 && round < r) ? rest : 0, key: `${d.key}|${gear}|ss${bi}` }));
+    });
+    const fin = src.finisher || [];
+    if (fin.length) {
+      const label = d.type === "engine" && !room ? "Core" : "Finisher";
+      const perItem = fin.some(f => f.rounds);
+      if (perItem) fin.forEach(it => { const r = it.rounds || 1;
+        for (let round = 1; round <= r; round++) push("finisher", label, it, { round, rounds: r, pos: 1, of: 1, rest: round < r ? restSecFor("finisher") : 0 }); });
+      else for (let round = 1; round <= showRounds; round++)
+        fin.forEach((it, i, a) => push("finisher", label, it,
+          { round, rounds: showRounds, pos: i + 1, of: a.length, rest: (i === a.length - 1 && round < showRounds) ? restSecFor("finisher") : 0, key: `${d.key}|${gear}|fin` }));
+    }
+    (src.cool || []).forEach(it => push("cool", "Cool-down", it, { rest: 0 }));
+    steps.push({ block: "end", label: "Finish", mode: "none" });
+    return steps;
+  }
+  const rxOf = s => {
+    const load = s.item.l || s.meta.load || "", reps = s.item.r || s.meta.reps || "";
+    const showLoad = load && !/^bodyweight$/i.test(load.trim());
+    return [showLoad ? load : "", reps].filter(Boolean).join(" × ");
+  };
+  function focusPos(d, n) {
+    try { const s = JSON.parse(localStorage.getItem(FOCUS_KEY) || "null");
+      if (s && s.date === DATE && s.key === `${d.key}|${gear}` && s.pos >= 0 && s.pos < n) return s.pos; } catch (_) {}
+    return 0;
+  }
+  const saveFocusPos = (d, pos) => { try { localStorage.setItem(FOCUS_KEY, JSON.stringify({ date: DATE, key: `${d.key}|${gear}`, pos })); } catch (_) {} };
+
+  async function renderFocus() {
+    stopAllClocks();
+    if (holdInterval) { clearInterval(holdInterval); holdInterval = null; holdBtn = null; }
+    if (saveTimer) { clearTimeout(saveTimer); await flushSaves(); }
+    host.textContent = "";
+    const d = week.days[active];
+    const steps = buildSteps(d);
+    let pos = focusPos(d, steps.length);
+    const gearLabel = (GEARS.find(g => g.id === gear) || {}).label || "";
+    const moves = steps.filter(s => s.item && (!s.round || s.round === 1)).length;   /* movements, not rounds × movements */
+
+    const fx = el(host, "div", "fx");
+    /* ---- sidebar ---- */
+    const side = el(fx, "div", "fxside");
+    const shead = el(side, "div", "fxshead");
+    el(shead, "div", "fxtitle", (gear === "room" && week.room_session) ? week.room_session.title : d.title);
+    el(shead, "div", "fxsub", `${gearLabel} · ${moves} movement${moves === 1 ? "" : "s"}`);
+    const prog = el(shead, "div", "fxprog");
+    const list = el(side, "div", "fxlist");
+    const foot = el(side, "div", "fxfoot");
+    const ws = Weight.summary();
+    if (ws) {
+      const l = el(foot, "div", "fxwt");
+      el(l, "div", "fxwk", "Weight");
+      const v = el(l, "div", "fxwv", `${ws.lbs.toFixed(1)} lb `);
+      if (ws.rate != null) el(v, "span", "fxwr", `${ws.rate > 0 ? "+" : "−"}${Math.abs(ws.rate).toFixed(1)}/wk`);
+      el(foot, "span", "fxwg", ws.eta ? `${ws.tgt} → ${ws.eta}` : `goal ${ws.tgt}`);
+    }
+    /* ---- main ---- */
+    const main = el(fx, "div", "fxmain");
+
+    /* the list groups by block; a superset shows one row per movement and the
+       round in its header, not R×N rows */
+    const rows = [];
+    let lastGroup = null;
+    steps.forEach((s, i) => {
+      const g = s.round ? `${s.label}|${s.round}` : s.label;
+      if (g !== lastGroup && s.block !== "end") {
+        el(list, "div", "fxgroup", s.round ? `${s.label} · Round ${s.round}/${s.rounds}` : s.label);
+        lastGroup = g;
+      }
+      const row = el(list, "div", "fxrow" + (s.block === "end" ? " fxrow-end" : ""));
+      el(row, "span", "fxdot");
+      el(row, "span", "fxrn", s.item ? shortName(s.item.n) : s.block === "end" ? "Feedback & mark complete" : s.title || s.label);
+      if (s.item) el(row, "span", "fxrx", /calibrate/i.test(rxOf(s)) ? "calibrate" : rxOf(s));
+      row.onclick = () => go(i);
+      rows.push(row);
+    });
+    const blocks = [...new Set(steps.map(s => s.label))];
+    const segs = blocks.map(b => { const seg = el(prog, "span", "fxseg"); seg.style.flex = String(Math.max(1, steps.filter(s => s.label === b).length)); return { b, seg }; });
+
+    function paintList() {
+      rows.forEach((r, i) => r.dataset.st = i < pos ? "done" : i === pos ? "on" : "");
+      const cur = steps[pos];
+      segs.forEach(({ b, seg }) => {
+        const idx = blocks.indexOf(b), curIdx = blocks.indexOf(cur.label);
+        seg.dataset.st = idx < curIdx ? "done" : idx === curIdx ? "on" : "";
+      });
+      const on = rows[pos]; if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest" });
+    }
+    function go(i) {
+      stopAllClocks();
+      if (holdInterval) { clearInterval(holdInterval); holdInterval = null; holdBtn = null; }
+      pos = Math.max(0, Math.min(steps.length - 1, i));
+      saveFocusPos(d, pos);
+      paintList(); paintMain();
+    }
+
+    function stepper(parent, label, value, step, onChange) {
+      const row = el(parent, "div", "fxstep");
+      el(row, "span", "fxk", label);
+      const ctl = el(row, "div", "fxctl");
+      const minus = el(ctl, "button", "fxpm", "−"); minus.type = "button";
+      const inp = el(ctl, "input", "fxnum"); inp.type = "text"; inp.inputMode = "decimal"; inp.value = value; inp.placeholder = "—";
+      const plus = el(ctl, "button", "fxpm", "+"); plus.type = "button";
+      const bump = k => { const v = parseFloat(inp.value); inp.value = String(Math.max(0, Math.round(((isNaN(v) ? 0 : v) + k * step) * 100) / 100)); onChange(inp.value); };
+      minus.onclick = () => bump(-1); plus.onclick = () => bump(1);
+      inp.onchange = () => onChange(inp.value.trim());
+      return inp;
+    }
+
+    function paintMain() {
+      main.textContent = "";
+      const s = steps[pos], next = steps[pos + 1];
+      const nextName = next ? (next.item ? shortName(next.item.n) : next.block === "end" ? "finish" : next.label) : null;
+      const top = el(main, "div", "fxtop");
+      el(top, "span", "fxblk", s.label);
+      if (s.round) el(top, "span", "fxpos", `Round ${s.round} of ${s.rounds} · movement ${s.pos} of ${s.of}`);
+      if (s.rest) el(top, "span", "fxrest", `rest after · ${s.rest}s`);
+
+      if (s.block === "end") {
+        const box = el(main, "div", "fxend");
+        el(box, "div", "fxname", "Session done");
+        el(box, "div", "fxeq", "How did it go?");
+        yogaRow(box, d.key); feedbackBox(box, d.key); sessionBar(box, d.key);
+        return;
+      }
+      const body = el(main, "div", "fxbody");
+      const left = el(body, "div", "fxleft");
+      const right = el(body, "div", "fxright");
+      let onDone = null;
+      if (s.block === "jm" || s.block === "engine") {
+        el(left, "div", "fxname", s.title || s.label);
+        const box = el(left, "div", "fxprose");
+        if (s.prose) box.textContent = s.prose;
+        else (s.items || []).forEach((it, i) => { const r = el(box, "div", "jmitem"); el(r, "span", "jmn", String(i + 1).padStart(2, "0")); el(r, "span", null, it); });
+      } else {
+        el(left, "div", "fxname", s.canon);
+        const eq = [s.meta.equipment, (String(s.item.n).match(/\((.*?)\)/) || [])[1]].filter(Boolean).join(" · ");
+        if (eq) el(left, "div", "fxeq", eq);
+        const fig = el(left, "div", "fxfig");
+        const imgPath = Array.isArray(s.meta.form) ? s.meta.form[0] : s.meta.form;
+        if (imgPath) {
+          const img = el(fig, "img"); img.alt = `${s.canon} form`;
+          imageURL(imgPath).then(u => { img.src = u; img.onclick = () => openLightbox(u, s.canon); })
+            .catch(() => { fig.textContent = ""; el(fig, "div", "mcph", "form pic"); });
+        } else el(fig, "div", "mcph", "form pic");
+
+        const saved = logIndex.get(entryKey(DATE, d.key, s.canon)) || {};
+        const last = lastLogged(s.canon);
+        const tgt = el(right, "div", "fxcard");
+        el(tgt, "span", "fxk", "Target");
+        const rx = rxOf(s);
+        el(tgt, "span", "fxtgt" + (/calibrate/i.test(rx) ? " warn" : ""), rx || "—");
+        if (last) el(tgt, "span", "fxlast", `last session ${last.weight || "—"}${last.reps ? ` × ${last.reps}` : ""}${last.time ? ` · ${last.time}` : ""}`);
+
+        if (s.mode === "full") {
+          const load = s.item.l || s.meta.load || "", reps = s.item.r || s.meta.reps || "";
+          const card = el(right, "div", "fxcard");
+          const cur = { weight: (saved.weight != null && saved.weight !== "") ? saved.weight : (last && last.weight ? last.weight : numFrom(load)),
+                        reps:   (saved.reps   != null && saved.reps   !== "") ? saved.reps   : (last && last.reps   ? last.reps   : numFrom(reps)) };
+          const push = () => queueSave(d.key, s.canon, { weight: String(cur.weight).trim(), reps: String(cur.reps).trim() });
+          /* ponytail: 1 kg / 1 rep steps; the number is typeable for odd pins */
+          stepper(card, "Weight kg", cur.weight, 1, v => { cur.weight = v; push(); });
+          stepper(card, "Reps", cur.reps, 1, v => { cur.reps = v; push(); });
+          onDone = push;   /* Done means "I did these numbers" — log them even if untouched */
+        } else if (s.mode === "hold") {
+          const sec = parseSeconds(s.item.r) ?? parseSeconds(s.meta.reps);
+          const card = el(right, "div", "fxcard");
+          if (sec) {
+            const btn = el(card, "button", "hold fxhold", saved.time ? `✓ ${saved.time}` : `▶ ${sec}s`);
+            btn._idle = btn.textContent; if (saved.time) btn.classList.add("fin");
+            btn.onclick = () => startHold(d.key, s.canon, sec, btn);
+          } else el(card, "span", "trendlab", "timed hold — no duration parsed");
+        }
+        if (Array.isArray(s.meta.cues) && s.meta.cues.length) {
+          const how = el(right, "div", "fxcard");
+          el(how, "span", "fxk", "How to");
+          const ul = el(how, "ul", "mccues");
+          s.meta.cues.forEach((q, i) => { const li = el(ul, "li", "mccue fxcue"); el(li, "span", "mccuen", String(i + 1).padStart(2, "0")); el(li, "span", null, q); });
+        }
+      }
+      const done = el(right, "button", "fxdone", nextName ? `Done — next: ${nextName}` : "Done");
+      done.type = "button";
+      let timer = null;
+      const handle = { stop() { if (timer) { timer.cancel(); timer = null; } releaseClock(handle); done.classList.remove("run"); } };
+      done.onclick = () => {
+        if (timer) { handle.stop(); go(pos + 1); return; }        /* press again to skip the rest */
+        if (s.mode === "check") queueSave(d.key, s.canon, { done: true });
+        if (onDone) onDone();
+        if (s.key && s.pos === s.of) roundState.set(s.key, s.round); /* keep the Plan set bar honest */
+        if (!s.rest) { go(pos + 1); return; }
+        claimClock(handle); done.classList.add("run");
+        timer = countdown(s.rest, r => { done.textContent = `Resting ${fmt(r)} — tap to skip`; }, () => { restOver(); handle.stop(); go(pos + 1); });
+      };
+      const skip = el(right, "button", "fxskip", "Skip movement"); skip.type = "button";
+      skip.onclick = () => go(pos + 1);
+      if (next && next.item) {
+        const up = el(right, "div", "fxnext");
+        el(up, "span", "fxk", "Up next");
+        el(up, "span", "fxnn", nextName);
+        el(up, "span", "fxrx", rxOf(next));
+      }
+    }
+    paintList(); paintMain();
+  }
+
+  const render = () => view === "focus" ? renderFocus() : renderDay();
+
   async function renderDay() {
     /* the host is about to be emptied — a clock still ticking on a node that no
        longer exists would beep at you from nowhere */
@@ -2686,6 +2934,16 @@ const Workout = (() => {
       return (mondayFirst >= 0 && mondayFirst < week.days.length) ? mondayFirst : 0;
     })();
 
+    view = (() => { try { return localStorage.getItem(VIEW_KEY) === "focus" ? "focus" : "plan"; } catch (_) { return "plan"; } })();
+    const seg = el(root, "div", "wt-seg fxview");
+    const segBtns = [["plan", "Plan"], ["focus", "Focus"]].map(([id, lab]) => {
+      const b = el(seg, "button", "wt-segbtn", lab); b.type = "button";
+      b.onclick = () => { view = id; try { localStorage.setItem(VIEW_KEY, id); } catch (_) {} paintView(); render(); };
+      return { b, id };
+    });
+    const paintView = () => { root.dataset.view = view; segBtns.forEach(s => s.b.dataset.on = s.id === view ? "1" : "0"); };
+    paintView();
+
     const hdr = el(root, "div", "hdr");
     const hleft = el(hdr, "div");
     el(hleft, "div", "kick", "Training");
@@ -2709,7 +2967,7 @@ const Workout = (() => {
       const t = el(tabs, "button", "tab");
       t.dataset.on = i === active ? "1" : "0";
       el(t, "div", "tabname", name);
-      t.onclick = () => { active = i; renderDay(); };
+      t.onclick = () => { active = i; render(); };
       tabEls.push(t);
     });
 
@@ -2724,13 +2982,13 @@ const Workout = (() => {
         gear = g.id;
         try { localStorage.setItem("wkt-gear", JSON.stringify({ date: DATE, id: gear })); } catch (_) {}
         for (const id in gearEls) gearEls[id].dataset.on = id === gear ? "1" : "0";
-        renderDay();
+        render();
       };
       gearEls[g.id] = b;
     }
 
     host = el(root, "div");
-    renderDay();
+    render();
   }
 
   return { mount };
