@@ -257,8 +257,8 @@ body { min-height:100%; }
    swaps the card page for a player — session list in a sidebar, one movement
    at a time on the right. Same tokens, same data, same saves as the cards. */
 .wkt .fxview{margin:0 0 14px;width:280px}
-.wkt[data-view="focus"] .hdr,.wkt[data-view="focus"] .wstrip,.wkt[data-view="focus"] .wmount,.wkt[data-view="focus"] .stale{display:none}
-.wkt[data-view="focus"] .fx{margin-top:0}
+/* the header stays in Focus: its day and gear chips are how you pick the session */
+.wkt[data-view="focus"] .wstrip,.wkt[data-view="focus"] .wmount,.wkt[data-view="focus"] .stale{display:none}
 .wkt .fx{display:flex;min-height:640px;margin-top:18px;border:1px solid var(--hairline);border-radius:8px;overflow:hidden;background:var(--bg);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif}
 .wkt .fxside{width:340px;flex:0 0 auto;background:var(--card);border-right:1px solid var(--hairline);display:flex;flex-direction:column;min-height:0}
