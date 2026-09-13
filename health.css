@@ -66,36 +66,33 @@ body { min-height:100%; }
 /* app tabs (workout/diet) host the Health apps — they bring their own skin */
 #workoutBody, #dietBody { width:100%; }
 
-/* ---------- Workout · Renovatio skin (ported from Workout.md) ---------- */
+/* ---------- Workout · Plan (Claude Design "Workout Focus", Plan frame) ----------
+   One 1360px frame in the design; here it keys off the .wkt frame (a size
+   container). Cards: form banner 21/8, name + target on one line, cues as one
+   muted line, weight/reps underlined inputs. Warm-up rows are thumbnail + name
+   + rest. Finisher rows are name + hold/rest. Cool-down is banner + name. */
 .wkt{ color:var(--fg); background:var(--bg); font-family:var(--body);
   width:100%; max-width:none; font-size:var(--fs-body); line-height:1.5; padding:4px 0 28px;
-  container-type:inline-size; container-name:wkt;   /* the movement grid sizes off this frame, not the viewport */
-  /* retired — mapped onto the file-wide scale */ }
+  container-type:inline-size; container-name:wkt }
 .wkt .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .wkt .label{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--gold-dim)}
-.wkt .hdr{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;padding-bottom:16px;border-bottom:none;position:relative}
+/* header: kicker + brand left, day chips + gear chips right, gold rule under */
+.wkt .hdr{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;padding-bottom:12px;position:relative}
 .wkt .hdr::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;
   background:linear-gradient(90deg,var(--gold-dim),var(--gold-dim) 60%,transparent)}
-.wkt .kick{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px}
-.wkt .brand{font-family:var(--serif);font-weight:700;font-size:var(--fs-display);line-height:1;color:var(--gold)}
-.wkt .hdate{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
+.wkt .kick{font-family:var(--mono);font-weight:500;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px}
+.wkt .brand{font-family:var(--serif);font-weight:700;font-size:26px;line-height:1;color:var(--gold)}
 .wkt .sub{font-family:var(--mono);font-size:var(--fs-meta);color:var(--faint);margin:10px 0 18px;line-height:1.6}
 .wkt .sub:empty{display:none}
-.wkt .tabs{display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--hairline);scrollbar-width:none}
-.wkt .tabs::-webkit-scrollbar{display:none}
-.wkt .tab{flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:12px 18px 10px;cursor:pointer;
-  font-family:var(--font-mono);font-size:var(--fs-meta);
-  border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;text-align:left;user-select:none}
-.wkt .tab[data-on="1"]{border-bottom-color:var(--gold);background:var(--gold-wash)}
-.wkt .tabname{font-family:var(--serif);font-weight:600;font-size:var(--fs-body);color:var(--dim);letter-spacing:.05em}
-.wkt .tab[data-on="1"] .tabname{color:var(--gold)}
-.wkt .tabsub{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
-.wkt .gutter{display:flex;align-items:center;gap:16px;margin:18px 0 26px;flex-wrap:wrap}
-/* header chips: day tabs and session gears as two bordered mono groups, right of the title */
-.wkt .hchips{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-bottom:4px}
+.wkt .hchips{margin-left:auto;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.wkt .gears{display:inline-flex;border:1px solid var(--hairline);border-radius:var(--radius);overflow:hidden}
+.wkt .gear{padding:7px 14px;background:none;border:none;cursor:pointer;color:var(--faint);
+  font-family:var(--mono);font-weight:500;font-size:var(--fs-meta);letter-spacing:2px;text-transform:uppercase}
 .wkt .days .gear{padding:7px 13px;letter-spacing:1px}
+.wkt .gear + .gear{border-left:1px solid var(--hairline)}
+.wkt .gear[data-on="1"]{color:var(--gold);background:var(--gold-wash)}
 /* weight strip: the card's numbers on one line; Edit today opens the card under it */
-.wkt .wstrip{display:flex;align-items:center;gap:22px;flex-wrap:wrap;background:var(--card);border:1px solid var(--hairline);border-radius:var(--radius);padding:12px 18px;margin:18px 0 0;
+.wkt .wstrip{display:flex;align-items:center;gap:26px;flex-wrap:wrap;background:var(--card);border:1px solid var(--hairline);border-radius:var(--radius);padding:12px 18px;margin:16px 0 0;
   font-family:var(--mono);font-variant-numeric:tabular-nums}
 .wkt .wslab{font-size:10px;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:var(--gold-dim)}
 .wkt .wsn{font-size:24px;font-weight:600;letter-spacing:-.02em;color:var(--fg)}
@@ -104,155 +101,132 @@ body { min-height:100%; }
 .wkt .wsk b{font-weight:500;color:var(--fg)}
 .wkt .wsk b.ok{color:var(--ok)} .wkt .wsk b.bad{color:var(--bad)} .wkt .wsk b.gold{color:var(--gold-hi)}
 .wkt .wsedit{margin-left:auto;background:none;border:1px solid var(--gold-dim);color:var(--gold);cursor:pointer;border-radius:var(--radius);
-  font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;padding:8px 14px;min-height:36px}
+  font-family:var(--mono);font-weight:500;font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;padding:8px 14px}
 .wkt .wsedit:hover,.wkt .wsedit[data-on="1"]{background:var(--gold-wash)}
 .wkt .wmount[hidden]{display:none}
 .wkt .wmount:not([hidden]){margin-bottom:8px}
-.wkt .dhead{margin-top:22px}
-/* feedback and mark-complete share a row */
-.wkt .fin{display:flex;gap:12px;align-items:stretch;margin-top:8px}
-.wkt .fin .fb{flex:1;min-width:0}
-.wkt .fin .fb textarea{display:block;min-height:48px;height:48px;resize:none;padding:13px 16px;margin:0}
-.wkt .fin .sessionbar{margin:0;padding:0;border:none;display:flex}
-.wkt .fin .sessionbtn{width:auto;padding:0 26px;white-space:nowrap}
-.wkt .gears{display:inline-flex;border:1px solid var(--hairline);border-radius:var(--radius);overflow:hidden}
-.wkt .gear{padding:8px 18px;background:none;border:none;cursor:pointer;color:var(--faint);
-  font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:.25em;text-transform:uppercase}
-.wkt .gear + .gear{border-left:1px solid var(--hairline)}
-.wkt .gear[data-on="1"]{color:var(--gold);background:var(--gold-wash)}
-.wkt .dhead{margin-bottom:22px}
-.wkt .dtitle{font-family:var(--serif);font-weight:700;font-size:var(--fs-title);line-height:1.2;margin:0}
+/* day + sections: 16px rhythm, 8px inside a section */
+.wkt .dhead{margin:16px 0}
+.wkt .dtitle{font-family:var(--serif);font-weight:700;font-size:18px;line-height:1.2;margin:0}
 .wkt .dtag{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:.15em;text-transform:uppercase;color:var(--faint);margin-top:7px}
-.wkt .section{margin-bottom:26px}
-.wkt .shead{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
-.wkt .stitle{font-family:var(--serif);font-size:var(--fs-dense);letter-spacing:3px;text-transform:uppercase;color:var(--gold);white-space:nowrap}
-.wkt .srule{flex:1;height:1px;background:var(--hairline)}
-.wkt .smeta{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint);white-space:nowrap}
-.wkt .grid{display:grid;gap:var(--gutter-sm)}
-.wkt .mc{position:relative;display:grid;grid-template-columns:320px 1fr;border:1px solid var(--hairline);background:var(--card);overflow:hidden;border-radius:4px}
-.wkt .mc.done{border-color:var(--gold-dim)}
-.wkt .mcfig{position:relative;background:var(--card2);border-right:1px solid var(--hairline);min-height:170px}
-.wkt .mcfig img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:zoom-in;display:block}
+.wkt .section{margin-bottom:16px}
+.wkt .shead{display:flex;align-items:baseline;gap:12px;margin-bottom:8px}
+.wkt .stitle{font-family:var(--serif);font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);white-space:nowrap}
+.wkt .srule{flex:1;height:1px;background:var(--hairline);align-self:center}
+.wkt .smeta{font-family:var(--mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.wkt .grid{display:grid;gap:8px}
+.wkt .grid.c2{grid-template-columns:1fr 1fr}
+.wkt .grid.c3{grid-template-columns:1fr 1fr 1fr}
+.wkt .rows{display:flex;flex-direction:column;gap:8px}
+/* the card */
+.wkt .mc{position:relative;display:flex;flex-direction:column;border:1px solid var(--hairline);background:var(--card);overflow:hidden;border-radius:var(--radius)}
+.wkt .mcfig{position:relative;aspect-ratio:21/8;background:var(--card2);border-bottom:1px solid var(--hairline);cursor:zoom-in;
+  background-image:repeating-linear-gradient(45deg,var(--ink-2) 0,var(--ink-2) 12px,var(--ink-3) 12px,var(--ink-3) 13px)}
+.wkt .mcfig img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .wkt .mcph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint);
-  background-image:repeating-linear-gradient(45deg,transparent 0,transparent 9px,var(--gold-bg) 9px,var(--gold-bg) 10px)}
-.wkt .mcbody{position:relative;padding:18px 20px 16px;display:flex;flex-direction:column;gap:14px;min-width:0}
-.wkt .mckicker{display:flex;align-items:center;gap:10px}
-.wkt .mcrule{height:1px;width:26px;background:var(--gold);flex:0 0 auto}
-.wkt .mckick{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--gold)}
-.wkt .mcname{font-family:var(--serif);font-weight:600;font-size:var(--fs-lead);line-height:1.2;margin:6px 0 0}
-.wkt .mcmeta{display:flex;flex-wrap:wrap;gap:3px 16px;font-family:var(--mono);font-size:var(--fs-meta);
-  letter-spacing:1px;text-transform:uppercase;color:var(--faint);margin-top:7px}
-.wkt .mcrx{color:var(--gold)}
-.wkt .mccues{margin:0;padding:0;list-style:none}
-.wkt .mccue{font-family:var(--mono);font-size:var(--fs-dense);color:var(--cue);display:grid;grid-template-columns:26px 1fr;gap:8px;padding:3px 0;line-height:1.55}
-.wkt .mccuen{color:var(--gold-dim)}
-.wkt .mccuet{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-bottom:7px}
-.wkt .mcctrl{display:flex;gap:26px;align-items:flex-end;padding-top:13px;border-top:1px solid var(--hairline)}
-.wkt .fieldlab{display:block;font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--gold-dim);margin-bottom:4px}
-.wkt .field{min-width:82px}
-.wkt .inp{width:100%;background:transparent;border:none;border-bottom:1px solid var(--hairline);color:var(--fg);
-  font-family:var(--mono);font-size:var(--fs-lead);padding:3px 0;font-variant-numeric:tabular-nums;outline:none}
+  font-family:var(--mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);cursor:default}
+.wkt .mcbody{padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.wkt .mchead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.wkt .mcname{font-family:var(--serif);font-weight:600;font-size:19px;line-height:1.2}
+.wkt .mcrx{margin-left:auto;font-family:var(--mono);font-weight:600;font-size:14px;color:var(--gold);white-space:nowrap}
+.wkt .mcrx.warn{color:var(--warn)}
+.wkt .mccueline{font-family:var(--mono);font-size:12px;color:var(--faint);line-height:1.5}
+.wkt .mcctrl{display:flex;gap:22px;align-items:flex-end;padding-top:10px;border-top:1px solid var(--hairline)}
+.wkt .field{display:flex;flex-direction:column;gap:2px}
+.wkt .fieldlab{font-family:var(--mono);font-weight:500;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--gold-dim)}
+.wkt .inp{width:64px;background:transparent;border:none;border-bottom:1px solid var(--hairline);color:var(--fg);
+  font-family:var(--mono);font-weight:500;font-size:20px;padding:2px 0;font-variant-numeric:tabular-nums;outline:none}
+.wkt .field.reps .inp{width:48px}
 .wkt .inp:focus{border-bottom-color:var(--gold);color:var(--gold)}
-.wkt .hold{font-family:var(--mono);font-size:var(--fs-dense);letter-spacing:.15em;text-transform:uppercase;
-  padding:9px 18px;background:none;color:var(--gold);border:1px solid var(--gold-dim);cursor:pointer;border-radius:var(--radius)}
-.wkt .hold.run{color:var(--fg);border-color:var(--gold);background:var(--gold-wash)}
+/* row bodies: finisher, cool-down, warm-up — name over target, control on the right */
+.wkt .mcbody.row{flex-direction:row;align-items:center;gap:12px;padding:12px 16px}
+.wkt .mcbody.row .mchead{flex:1;min-width:0;flex-direction:column;gap:2px;align-items:flex-start}
+.wkt .mcbody.row .mcname{font-size:17px}
+.wkt .mcbody.row .mcrx{margin-left:0;font-weight:500;font-size:13px;white-space:normal}
+.wkt .mcrow{flex-direction:row;align-items:center;gap:16px;padding:12px 16px}
+.wkt .mcrow .mcfig{width:120px;height:68px;aspect-ratio:auto;flex:0 0 auto;border:none;border-radius:3px}
+.wkt .mcrow .mcfig .mcph{font-size:9px;letter-spacing:1px}
+.wkt .mcrow .mcbody{flex:1;padding:0}
+/* buttons */
+.wkt .hold{font-family:var(--mono);font-weight:500;font-size:12px;letter-spacing:2px;
+  padding:10px 18px;background:none;color:var(--gold);border:1px solid var(--gold-dim);cursor:pointer;border-radius:var(--radius);white-space:nowrap}
+.wkt .hold.run{color:var(--fg);border-color:var(--gold);background:var(--gold-wash);font-variant-numeric:tabular-nums}
 .wkt .hold.fin{color:var(--done);border-color:var(--ok-line)}
-.wkt .mcfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:11px;
-  border-top:1px solid var(--hairline);font-family:var(--mono);font-size:var(--fs-meta);color:var(--faint)}
-.wkt .mcfoot:empty{display:none}
-.wkt .dots{color:var(--gold-dim);letter-spacing:3px;cursor:pointer;user-select:none}
-.wkt .rest{align-self:flex-start;font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:2px;text-transform:uppercase;
-  padding:9px 16px;min-height:42px;background:none;color:var(--dim);border:1px solid var(--hairline);cursor:pointer;border-radius:var(--radius)}
+.wkt .rest{font-family:var(--mono);font-weight:500;font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  padding:9px 15px;background:none;color:var(--dim);border:1px solid var(--hairline);cursor:pointer;border-radius:var(--radius);white-space:nowrap}
 .wkt .rest:hover{border-color:var(--gold-dim);color:var(--gold)}
 .wkt .rest.run{color:var(--gold);border-color:var(--gold);background:var(--gold-wash);font-variant-numeric:tabular-nums}
 .wkt .rest.fin{color:var(--done);border-color:var(--ok-line)}
+.wkt .mcbody.row .rest,.wkt .mcbody.row .hold{margin-left:auto;flex:0 0 auto}
 /* set bar — round counter and the between-rounds rest are one control, because
    finishing a round is what starts the rest. Sits under the section head so it
    reads before the movements it governs. */
-.wkt .setbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;
- padding:10px 13px;border:1px solid var(--hairline);border-radius:var(--radius);background:var(--card)}
+.wkt .setbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 8px;
+ padding:8px 13px;border:1px solid var(--hairline);border-radius:var(--radius);background:var(--card)}
 .wkt .setbar[data-resting]{border-color:var(--gold-dim);background:var(--gold-wash)}
 .wkt .setbar[data-done]{border-color:var(--ok-line)}
 .wkt .setpips{display:flex;gap:5px;flex-shrink:0}
 .wkt .setpip{width:22px;height:5px;border-radius:var(--radius-dot);background:var(--hairline)}
 .wkt .setpip.on{background:var(--gold)}
 .wkt .setbar[data-done] .setpip.on{background:var(--done)}
-.wkt .setlbl{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:2px;text-transform:uppercase;
- color:var(--faint);white-space:nowrap}
+.wkt .setlbl{font-family:var(--mono);font-weight:500;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);white-space:nowrap}
 .wkt .setbar[data-resting] .setlbl{color:var(--gold)}
 .wkt .setbar[data-done] .setlbl{color:var(--done)}
-.wkt .setbtn{margin-left:auto;min-height:42px;padding:0 18px;cursor:pointer;
- font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:2px;text-transform:uppercase;
+.wkt .setbtn{margin-left:auto;padding:7px 16px;cursor:pointer;
+ font-family:var(--mono);font-weight:500;font-size:10px;letter-spacing:2px;text-transform:uppercase;
  background:transparent;color:var(--dim);border:1px solid var(--hairline);border-radius:var(--radius);
  font-variant-numeric:tabular-nums;white-space:nowrap}
 .wkt .setbtn:hover{border-color:var(--gold-dim);color:var(--gold)}
-.wkt .setbar[data-resting] .setbtn{color:var(--gold);border-color:var(--gold);font-size:var(--fs-lead);letter-spacing:1px}
+.wkt .setbar[data-resting] .setbtn{color:var(--gold);border-color:var(--gold);font-size:var(--fs-body);letter-spacing:1px}
 .wkt .setbar[data-done] .setbtn{color:var(--done);border-color:var(--ok-line)}
-.wkt .trend svg{display:block;margin-top:6px}
 .wkt .trendlab{font-family:var(--mono);font-size:var(--fs-meta);color:var(--faint)}
-.wkt .prose{border:1px solid var(--hairline);background:var(--card);padding:16px 20px;font-size:var(--fs-body);line-height:1.65;color:var(--dim);border-radius:4px}
-.wkt .fb textarea{width:100%;min-height:88px;box-sizing:border-box;resize:vertical;border:1px solid var(--hairline);background:var(--card);
-  color:var(--fg);padding:13px 17px;font-family:inherit;font-size:var(--fs-body);line-height:1.6;border-radius:4px;margin-bottom:22px}
-.wkt .fb textarea:focus{outline:none;border-color:var(--gold-dim)}
-.wkt .fb textarea::placeholder{color:var(--dim)}
-.wkt .jm{border:1px solid var(--hairline);background:var(--card);padding:20px 22px;border-radius:4px}
+.wkt .prose{border:1px solid var(--hairline);background:var(--card);padding:16px 20px;font-size:var(--fs-body);line-height:1.65;color:var(--dim);border-radius:var(--radius)}
+.wkt .jm{border:1px solid var(--hairline);background:var(--card);padding:20px 22px;border-radius:var(--radius)}
 .wkt .jmitem{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:6px 0;font-size:var(--fs-body);color:var(--dim);line-height:1.55}
 .wkt .jmn{font-family:var(--mono);font-size:var(--fs-meta);color:var(--gold-dim);padding-top:4px}
-.wkt .yoga{display:flex;align-items:center;gap:14px;border-left:2px solid var(--gold);background:var(--gold-wash);padding:13px 17px;margin-bottom:22px}
-.wkt .tick{width:30px;height:30px;flex:0 0 auto;border:1px solid var(--gold-dim);background:none;color:var(--gold);
-  display:flex;align-items:center;justify-content:center;font-size:var(--fs-body);cursor:pointer}
+.wkt .yoga{display:flex;align-items:center;gap:14px;border-left:2px solid var(--gold);background:var(--gold-wash);padding:11px 15px;margin-bottom:16px}
+.wkt .tick{width:26px;height:26px;flex:0 0 auto;border:1px solid var(--gold-dim);background:none;color:var(--gold);
+  display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer}
 .wkt .tick[data-on="1"]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
-.wkt .yogatxt{font-family:var(--mono);font-size:var(--fs-dense);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.wkt .yogatxt{font-family:var(--mono);font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim)}
 .wkt .stale{border-left:2px solid var(--warn);background:var(--warn-dim);padding:13px 17px;margin:14px 0 4px;
   font-family:var(--mono);font-size:var(--fs-dense);color:var(--warn);letter-spacing:.05em;line-height:1.6}
-.wkt .sessionbar{margin-top:30px;padding-top:22px;border-top:1px solid var(--hairline)}
-.wkt .sessionbtn{width:100%;padding:17px;background:none;border:1px solid var(--gold-dim);color:var(--gold);cursor:pointer;
-  font-family:var(--mono);font-size:var(--fs-dense);letter-spacing:1px;text-transform:uppercase;border-radius:var(--radius)}
+/* feedback and mark-complete share a row */
+.wkt .fin{display:flex;gap:12px;align-items:stretch}
+.wkt .fin .fb{flex:1;min-width:0}
+.wkt .fb textarea{display:block;width:100%;min-height:46px;height:46px;box-sizing:border-box;resize:none;border:1px solid var(--hairline);background:var(--card);
+  color:var(--fg);padding:12px 16px;font-family:var(--body);font-size:13px;line-height:1.5;border-radius:var(--radius);margin:0}
+.wkt .fb textarea:focus{outline:none;border-color:var(--gold-dim)}
+.wkt .fb textarea::placeholder{color:var(--dim)}
+.wkt .fxend .fb textarea{min-height:88px;height:auto;resize:vertical}
+.wkt .sessionbar{display:flex}
+.wkt .sessionbtn{padding:0 26px;background:none;border:1px solid var(--gold-dim);color:var(--gold);cursor:pointer;white-space:nowrap;
+  font-family:var(--mono);font-weight:500;font-size:12px;letter-spacing:1px;text-transform:uppercase;border-radius:var(--radius)}
 .wkt .sessionbtn:hover{background:var(--gold-wash)}
 .wkt .sessionbtn[data-on="1"]{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+.wkt .fxend .sessionbtn{width:100%;padding:17px}
 .wkt .lightbox{display:none;position:fixed;inset:0;z-index:50;background:var(--scrim);
   align-items:center;justify-content:center;cursor:zoom-out;padding:24px}
 .wkt .lightbox.on{display:flex}
 .wkt .lightbox img{max-width:94vw;max-height:88vh;border:1px solid var(--hairline)}
 .wkt .lightbox .cap{position:fixed;bottom:26px;left:0;right:0;text-align:center;color:var(--dim);
   font-family:var(--mono);font-size:var(--fs-dense);letter-spacing:1px;text-transform:uppercase}
-/* ---------- movement grid · columns ----------
-   One card shape, two arrangements. The wide card (figure beside the body)
-   only survives on a mid-width frame, 641–759px, where one card has the room
-   and two would not. Everywhere else the card stacks, figure on top: on a
-   phone because the frame is narrow, on a desktop because the grid runs two
-   or three across. Column count is auto-fit against a floor of --mc-min,
-   capped at --mc-cols-max (tokens.css). auto-fit collapses empty tracks, so a
-   two-card superset on a three-column frame still fills the row, and a lone
-   card in a block keeps the wide shape. All of it keys off the .wkt frame
-   (a size container), so the same rules hold inside any host width. */
-@container wkt ((max-width:640px) or (min-width:760px)){
-  .wkt .mc{grid-template-columns:1fr;grid-template-rows:auto 1fr}   /* body takes the slack, not the figure */
-  /* a grid item with an aspect-ratio does not stretch by default — it would size
-     itself from max-height and sit 443px wide in a 1080px card */
-  .wkt .mcfig{aspect-ratio:16/9;min-height:0;justify-self:stretch;width:100%;border-right:none;border-bottom:1px solid var(--hairline)}
+/* narrower frames: three-up becomes two-up, then everything one-up on a phone,
+   where the buttons also grow back to a 42px tap target */
+@container wkt (max-width:1000px){
+  .wkt .grid.c3{grid-template-columns:1fr 1fr}
 }
 @container wkt (max-width:640px){
-  .wkt .mcname{font-size:var(--fs-body)}   /* mobile: one step down */
-  .wkt .mcctrl{gap:16px}
+  .wkt .grid.c2,.wkt .grid.c3{grid-template-columns:1fr}
+  .wkt .mcfig{aspect-ratio:21/9}
   .wkt .shead{flex-wrap:wrap} .wkt .stitle{white-space:normal}   /* long superset labels overflowed the phone */
+  .wkt .rest,.wkt .hold,.wkt .setbtn,.wkt .wsedit{min-height:42px}
   .wkt .fin{flex-direction:column}
   .wkt .fin .sessionbtn{width:100%;padding:15px}
   .wkt .wstrip{gap:12px 18px}
   .wkt .wsedit{margin-left:0;width:100%}
-  .wkt .hchips{width:100%}
+  .wkt .hchips{width:100%;margin-left:0}
   .wkt .days{overflow-x:auto;max-width:100%;scrollbar-width:none}
-}
-@container wkt (min-width:760px){
-  .wkt .grid{grid-template-columns:repeat(auto-fit,
-    minmax(max(var(--mc-min),calc((100% - (var(--mc-cols-max) - 1)*var(--gutter-sm))/var(--mc-cols-max))),var(--mc-max)));
-    justify-content:start;max-width:calc(var(--mc-cols-max)*var(--mc-max) + (var(--mc-cols-max) - 1)*var(--gutter-sm))}
-  .wkt .mcfig{aspect-ratio:21/9;max-height:220px}  /* short banner, capped: compact */
-  .wkt .mcbody{padding:14px 16px 12px;gap:10px}
-  .wkt .mc:only-child{grid-template-columns:320px 1fr;grid-template-rows:auto}
-  .wkt .mc:only-child .mcfig{aspect-ratio:auto;min-height:170px;border-right:1px solid var(--hairline);border-bottom:none}
-  .wkt .mc:only-child .mcbody{padding:18px 20px 16px;gap:14px}
 }
 
 /* ---------- Workout · Focus player ----------
@@ -315,7 +289,9 @@ body { min-height:100%; }
 .wkt .fxnum{width:72px;text-align:center;background:transparent;border:none;color:var(--fg);font:600 28px var(--mono);font-variant-numeric:tabular-nums;outline:none;padding:0}
 .wkt .fxnum:focus{color:var(--gold)}
 .wkt .fxhold{align-self:flex-start;font-size:var(--fs-lead);padding:14px 22px}
-.wkt .fxcue{grid-template-columns:28px 1fr;color:var(--fg);font-family:inherit;font-size:14px}
+.wkt .mccues{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.wkt .mccue{display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:baseline;font-size:14px;line-height:1.5;color:var(--fg)}
+.wkt .mccuen{font-family:var(--mono);font-weight:600;font-size:13px;color:var(--gold-dim)}
 .wkt .fxdone{background:var(--gold);border:none;border-radius:14px;color:var(--bg);font:600 17px/1 inherit;padding:18px;cursor:pointer;min-height:54px}
 .wkt .fxdone:hover{background:var(--gold-hi)}
 .wkt .fxdone.run{background:var(--gold-wash);color:var(--gold);border:1px solid var(--gold);font-variant-numeric:tabular-nums}
