@@ -228,8 +228,10 @@ body { min-height:100%; }
    card in a block keeps the wide shape. All of it keys off the .wkt frame
    (a size container), so the same rules hold inside any host width. */
 @container wkt ((max-width:640px) or (min-width:760px)){
-  .wkt .mc{grid-template-columns:1fr}
-  .wkt .mcfig{aspect-ratio:16/9;min-height:0;border-right:none;border-bottom:1px solid var(--hairline)}
+  .wkt .mc{grid-template-columns:1fr;grid-template-rows:auto 1fr}   /* body takes the slack, not the figure */
+  /* a grid item with an aspect-ratio does not stretch by default — it would size
+     itself from max-height and sit 443px wide in a 1080px card */
+  .wkt .mcfig{aspect-ratio:16/9;min-height:0;justify-self:stretch;width:100%;border-right:none;border-bottom:1px solid var(--hairline)}
 }
 @container wkt (max-width:640px){
   .wkt .mcname{font-size:var(--fs-body)}   /* mobile: one step down */
@@ -247,7 +249,7 @@ body { min-height:100%; }
     minmax(max(var(--mc-min),calc((100% - (var(--mc-cols-max) - 1)*var(--gutter-sm))/var(--mc-cols-max))),1fr))}
   .wkt .mcfig{aspect-ratio:21/9;max-height:190px}  /* short banner, capped: compact */
   .wkt .mcbody{padding:14px 16px 12px;gap:10px}
-  .wkt .mc:only-child{grid-template-columns:320px 1fr}
+  .wkt .mc:only-child{grid-template-columns:320px 1fr;grid-template-rows:auto}
   .wkt .mc:only-child .mcfig{aspect-ratio:auto;min-height:170px;border-right:1px solid var(--hairline);border-bottom:none}
   .wkt .mc:only-child .mcbody{padding:18px 20px 16px;gap:14px}
 }
