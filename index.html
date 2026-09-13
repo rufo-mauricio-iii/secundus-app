@@ -2072,8 +2072,9 @@ const Workout = (() => {
   const LOG_DIR       = "orgs/health/data/workout/workout-log";
   const LOG_PATH      = "orgs/health/data/workout/workout-log.json";
   const SESSIONS_PATH = "orgs/health/data/workout/workout-sessions.json";
+  const NOTES_PATH    = "orgs/health/data/workout/workout-review-notes.json";
 
-  let mounted = false, week = null, log = [], sessions = {};
+  let mounted = false, week = null, log = [], sessions = {}, notes = {};
   let root, host, tabEls = [], gearEls = {}, lightbox = null;
 
   /* ---- helpers straight from the widget ---- */
@@ -2216,6 +2217,21 @@ const Workout = (() => {
     }
   }
   const localSessionTouches = {};
+  /* free-form feedback per day, keyed like sessions: `${DATE}__${dayKey}` */
+  async function writeNote(k, text) {
+    try {
+      notes = await saveJSON(NOTES_PATH, cur => {
+        const merged = (cur && typeof cur === "object") ? cur : {};
+        if (text) merged[k] = text; else delete merged[k];
+        return merged;
+      }, `workout: feedback ${DATE} [site]`);
+      syncDotFlash(true);
+    } catch (e) {
+      console.warn("[workout] note write failed", e);
+      toast("Feedback save failed");
+      syncDotFlash(false);
+    }
+  }
   function syncDotFlash(ok) {
     const dot = $("sync-dot");
     dot.className = ok ? "ok" : "err";
@@ -2243,6 +2259,8 @@ const Workout = (() => {
     }
     const s = await readFile(SESSIONS_PATH);
     sessions = (s && s.data && typeof s.data === "object") ? s.data : {};
+    const n = await readFile(NOTES_PATH);
+    notes = (n && n.data && typeof n.data === "object") ? n.data : {};
     logIndex = new Map();
     for (const e of log) {
       if (e && e.date === DATE && e.day && e.exercise) logIndex.set(entryKey(e.date, e.day, e.exercise), e);
@@ -2534,6 +2552,17 @@ const Workout = (() => {
     };
     el(box, "span", "yogatxt", "Yoga / mobility — counts as the day's mobility");
   }
+  function feedbackBox(parent, dayKey) {
+    const k = sessionKey(DATE, dayKey);
+    const box = el(parent, "div", "fb");
+    const ta = el(box, "textarea");
+    ta.placeholder = "Feedback — what felt light, what felt heavy, any niggles";
+    ta.value = notes[k] || "";
+    let t = null;
+    const save = () => { t = null; const v = ta.value.trim(); if (v !== (notes[k] || "")) writeNote(k, v); };
+    ta.oninput = () => { if (t) clearTimeout(t); t = setTimeout(save, 1200); };
+    ta.onblur  = () => { if (t) { clearTimeout(t); save(); } };
+  }
   function sessionBar(parent, dayKey) {
     const bar = el(parent, "div", "sessionbar");
     const k = sessionKey(DATE, dayKey);
@@ -2580,7 +2609,7 @@ const Workout = (() => {
         el(row, "span", "jmn", String(i + 1).padStart(2, "0"));
         el(row, "span", null, it);
       });
-      if (d.note) el(host, "div", "note", d.note);
+      feedbackBox(host, d.key);
       sessionBar(host, d.key);
       return;
     }
@@ -2626,8 +2655,7 @@ const Workout = (() => {
       movementGrid(s, d.key, src.cool, { section: "Cool-down", mode: defaultLogMode("cool") });
     }
     yogaRow(host, d.key);
-    const note = room ? room.note : d.note;
-    if (note) el(host, "div", "note", note);
+    feedbackBox(host, d.key);
     sessionBar(host, d.key);
   }
 
