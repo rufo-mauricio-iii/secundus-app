@@ -76,6 +76,9 @@
      block never runs more than --mc-cols-max across. health.css derives the
      column count from these two; nothing else declares a column number. */
   --mc-min:340px; --mc-cols-max:3;
+  /* and never wider than --mc-max: on a wide monitor a two-card superset was
+     stretching each card past 950px with a 190px-tall banner on top */
+  --mc-max:720px;
   /* ============================================================
      TYPE — the single source of truth for the whole file.
      Four families, one job each:
