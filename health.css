@@ -91,6 +91,30 @@ body { min-height:100%; }
 .wkt .tab[data-on="1"] .tabname{color:var(--gold)}
 .wkt .tabsub{font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
 .wkt .gutter{display:flex;align-items:center;gap:16px;margin:18px 0 26px;flex-wrap:wrap}
+/* header chips: day tabs and session gears as two bordered mono groups, right of the title */
+.wkt .hchips{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-bottom:4px}
+.wkt .days .gear{padding:7px 13px;letter-spacing:1px}
+/* weight strip: the card's numbers on one line; Edit today opens the card under it */
+.wkt .wstrip{display:flex;align-items:center;gap:22px;flex-wrap:wrap;background:var(--card);border:1px solid var(--hairline);border-radius:var(--radius);padding:12px 18px;margin:18px 0 0;
+  font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wkt .wslab{font-size:10px;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:var(--gold-dim)}
+.wkt .wsn{font-size:24px;font-weight:600;letter-spacing:-.02em;color:var(--fg)}
+.wkt .wsu{font-size:12px;font-weight:400;color:var(--faint);letter-spacing:0}
+.wkt .wsk{font-size:12px;color:var(--faint)}
+.wkt .wsk b{font-weight:500;color:var(--fg)}
+.wkt .wsk b.ok{color:var(--ok)} .wkt .wsk b.bad{color:var(--bad)} .wkt .wsk b.gold{color:var(--gold-hi)}
+.wkt .wsedit{margin-left:auto;background:none;border:1px solid var(--gold-dim);color:var(--gold);cursor:pointer;border-radius:var(--radius);
+  font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:1px;text-transform:uppercase;padding:8px 14px;min-height:36px}
+.wkt .wsedit:hover,.wkt .wsedit[data-on="1"]{background:var(--gold-wash)}
+.wkt .wmount[hidden]{display:none}
+.wkt .wmount:not([hidden]){margin-bottom:8px}
+.wkt .dhead{margin-top:22px}
+/* feedback and mark-complete share a row */
+.wkt .fin{display:flex;gap:12px;align-items:stretch;margin-top:8px}
+.wkt .fin .fb{flex:1;min-width:0}
+.wkt .fin .fb textarea{display:block;min-height:48px;height:48px;resize:none;padding:13px 16px;margin:0}
+.wkt .fin .sessionbar{margin:0;padding:0;border:none;display:flex}
+.wkt .fin .sessionbtn{width:auto;padding:0 26px;white-space:nowrap}
 .wkt .gears{display:inline-flex;border:1px solid var(--hairline);border-radius:var(--radius);overflow:hidden}
 .wkt .gear{padding:8px 18px;background:none;border:none;cursor:pointer;color:var(--faint);
   font-family:var(--mono);font-size:var(--fs-meta);letter-spacing:.25em;text-transform:uppercase}
@@ -210,6 +234,13 @@ body { min-height:100%; }
 @container wkt (max-width:640px){
   .wkt .mcname{font-size:var(--fs-body)}   /* mobile: one step down */
   .wkt .mcctrl{gap:16px}
+  .wkt .shead{flex-wrap:wrap} .wkt .stitle{white-space:normal}   /* long superset labels overflowed the phone */
+  .wkt .fin{flex-direction:column}
+  .wkt .fin .sessionbtn{width:100%;padding:15px}
+  .wkt .wstrip{gap:12px 18px}
+  .wkt .wsedit{margin-left:0;width:100%}
+  .wkt .hchips{width:100%}
+  .wkt .days{overflow-x:auto;max-width:100%;scrollbar-width:none}
 }
 @container wkt (min-width:760px){
   .wkt .grid{grid-template-columns:repeat(auto-fit,
@@ -226,7 +257,8 @@ body { min-height:100%; }
    swaps the card page for a player — session list in a sidebar, one movement
    at a time on the right. Same tokens, same data, same saves as the cards. */
 .wkt .fxview{margin:0 0 14px;width:280px}
-.wkt[data-view="focus"] .wmount,.wkt[data-view="focus"] .tabs,.wkt[data-view="focus"] .gutter,.wkt[data-view="focus"] .stale{display:none}
+.wkt[data-view="focus"] .hdr,.wkt[data-view="focus"] .wstrip,.wkt[data-view="focus"] .wmount,.wkt[data-view="focus"] .stale{display:none}
+.wkt[data-view="focus"] .fx{margin-top:0}
 .wkt .fx{display:flex;min-height:640px;margin-top:18px;border:1px solid var(--hairline);border-radius:8px;overflow:hidden;background:var(--bg);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif}
 .wkt .fxside{width:340px;flex:0 0 auto;background:var(--card);border-right:1px solid var(--hairline);display:flex;flex-direction:column;min-height:0}
