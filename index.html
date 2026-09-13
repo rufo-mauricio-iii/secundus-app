@@ -2068,9 +2068,13 @@ const Weight = (() => {
     const view = es.filter(e => T(todayISO()) - e.t <= win * DAY);
     const f = canFit(view) ? fit(view) : null;
     const tHit = (f && view.length) ? eta(f, view[view.length - 1].t, tgt) : null;
-    return { lbs: last.lbs, rate: f ? f.b * 7 : null, tgt, eta: tHit ? fmtShort(isoOf(tHit)) : null };
+    const today = es.find(e => e.date === todayISO());
+    return { lbs: last.lbs, rate: f ? f.b * 7 : null, tgt, eta: tHit ? fmtShort(isoOf(tHit)) : null,
+             avg: headline(es), pts: es.slice(-8).map(e => e.lbs), today: today ? today.lbs : null };
   }
-  return { mount, summary };
+  /* repaint hook for anything that shows summary() — fires after every save */
+  const onChange = fn => views.push(fn);
+  return { mount, summary, onChange };
 })();
 
 /* ====================================================================
@@ -2668,7 +2672,9 @@ const Workout = (() => {
     /* ---- sidebar ---- */
     const side = el(fx, "div", "fxside");
     const shead = el(side, "div", "fxshead");
-    el(shead, "div", "fxtitle", (gear === "room" && week.room_session) ? week.room_session.title : d.title);
+    const dayName = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][active] || "";
+    const focusTitle = (gear === "room" && week.room_session) ? week.room_session.title : String(d.title).split("·")[0].trim();
+    el(shead, "div", "fxtitle", `${dayName} — ${focusTitle}`);
     el(shead, "div", "fxsub", `${gearLabel} · ${moves} movement${moves === 1 ? "" : "s"}`);
     const prog = el(shead, "div", "fxprog");
     const list = el(side, "div", "fxlist");
@@ -2857,8 +2863,9 @@ const Workout = (() => {
         el(row, "span", "jmn", String(i + 1).padStart(2, "0"));
         el(row, "span", null, it);
       });
-      feedbackBox(host, d.key);
-      sessionBar(host, d.key);
+      const fin = el(host, "div", "fin");
+      feedbackBox(fin, d.key);
+      sessionBar(fin, d.key);
       return;
     }
 
@@ -2903,8 +2910,9 @@ const Workout = (() => {
       movementGrid(s, d.key, src.cool, { section: "Cool-down", mode: defaultLogMode("cool") });
     }
     yogaRow(host, d.key);
-    feedbackBox(host, d.key);
-    sessionBar(host, d.key);
+    const fin = el(host, "div", "fin");
+    feedbackBox(fin, d.key);
+    sessionBar(fin, d.key);
   }
 
   async function mount(container) {
@@ -2946,34 +2954,57 @@ const Workout = (() => {
 
     const hdr = el(root, "div", "hdr");
     const hleft = el(hdr, "div");
-    el(hleft, "div", "kick", "Training");
+    el(hleft, "div", "kick", `Training · ${fmtHeaderDate(new Date())}`);
     el(hleft, "div", "brand", "Workout");
-    el(hdr, "span", "hdate", fmtHeaderDate(new Date()));
+    const chips = el(hdr, "div", "hchips");
 
     if (week.review_due && DATE > week.review_due) {
       el(root, "div", "stale",
         `⚠ Plan week ended ${week.review_due} — run /workout-review to roll the week. Cards below still show the old week's plan.`);
     }
 
-    /* bodyweight card — same component the Diet view mounts (shaping D-2/D-4).
-       Between the header rule and the day tabs: the tabs are plan slots and
-       carry no date, so the card brings its own dated stepper. */
-    Weight.mount(el(root, "div", "wmount"), { chartH: 220 });
+    /* bodyweight: one strip (Claude Design "Workout Focus") — reading, sparkline,
+       7-day, trend, goal. "Edit today" opens the full card the Diet view mounts,
+       so logging and the goal editor are still the one component (D-2/D-4). */
+    const strip = el(root, "div", "wstrip");
+    const wmount = el(root, "div", "wmount"); wmount.hidden = true;
+    const paintStrip = () => {
+      strip.textContent = "";
+      const w = Weight.summary();
+      el(strip, "span", "wslab", "Weight");
+      if (!w) { el(strip, "span", "wsk", "no readings yet"); return; }
+      const n = el(strip, "span", "wsn", w.lbs.toFixed(1) + " "); el(n, "span", "wsu", "lb");
+      if (w.pts.length > 1) {
+        const NS = "http://www.w3.org/2000/svg", W = 120, H = 28, P = 3;
+        const svg = document.createElementNS(NS, "svg");
+        svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("aria-hidden", "true");
+        const lo = Math.min(...w.pts), hi = Math.max(...w.pts), rng = (hi - lo) || 1;
+        const pl = document.createElementNS(NS, "polyline");
+        pl.setAttribute("points", w.pts.map((v, i) => `${(P + i * (W - 2 * P) / (w.pts.length - 1)).toFixed(1)},${(H - P - (v - lo) / rng * (H - 2 * P)).toFixed(1)}`).join(" "));
+        pl.setAttribute("fill", "none"); pl.setAttribute("stroke", "var(--gold-hi)"); pl.setAttribute("stroke-width", "2"); pl.setAttribute("stroke-linecap", "round"); pl.setAttribute("stroke-linejoin", "round");
+        svg.appendChild(pl); strip.appendChild(svg);
+      }
+      const kv = (k, v, cls) => { const e = el(strip, "span", "wsk", k + " "); el(e, "b", cls || null, v); };
+      if (w.avg != null) kv("7-day", w.avg.toFixed(1));
+      if (w.rate != null) kv("trend", `${w.rate > 0 ? "+" : "−"}${Math.abs(w.rate).toFixed(1)} lb/wk`, w.rate < -0.05 ? "ok" : w.rate > 0.05 ? "bad" : "");
+      kv(`goal ${w.tgt} →`, w.eta || "no date yet", "gold");
+      const b = el(strip, "button", "wsedit", w.today != null ? `Edit today · ${w.today.toFixed(1)}` : "Log today"); b.type = "button";
+      b.onclick = () => { wmount.hidden = !wmount.hidden; b.dataset.on = wmount.hidden ? "0" : "1"; };
+      b.dataset.on = wmount.hidden ? "0" : "1";
+    };
+    Weight.mount(wmount, { chartH: 220 }).then(paintStrip);   /* the log loads async — paint once it is in */
+    Weight.onChange(paintStrip);
 
-    const tabs = el(root, "div", "tabs");
+    const dayBox = el(chips, "div", "gears days");
     tabEls = [];
     week.days.forEach((d, i) => {
-      const name = String(d.tab).split(" ")[0];
-      const t = el(tabs, "button", "tab");
+      const t = el(dayBox, "button", "gear", String(d.tab).split(" ")[0]);
       t.dataset.on = i === active ? "1" : "0";
-      el(t, "div", "tabname", name);
       t.onclick = () => { active = i; render(); };
       tabEls.push(t);
     });
 
-    const gutter = el(root, "div", "gutter");
-    el(gutter, "span", "label", "Session");
-    const gearBox = el(gutter, "div", "gears");
+    const gearBox = el(chips, "div", "gears");
     gearEls = {};
     for (const g of GEARS) {
       const b = el(gearBox, "button", "gear", g.label);
