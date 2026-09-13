@@ -246,8 +246,9 @@ body { min-height:100%; }
 }
 @container wkt (min-width:760px){
   .wkt .grid{grid-template-columns:repeat(auto-fit,
-    minmax(max(var(--mc-min),calc((100% - (var(--mc-cols-max) - 1)*var(--gutter-sm))/var(--mc-cols-max))),1fr))}
-  .wkt .mcfig{aspect-ratio:21/9;max-height:190px}  /* short banner, capped: compact */
+    minmax(max(var(--mc-min),calc((100% - (var(--mc-cols-max) - 1)*var(--gutter-sm))/var(--mc-cols-max))),var(--mc-max)));
+    justify-content:start;max-width:calc(var(--mc-cols-max)*var(--mc-max) + (var(--mc-cols-max) - 1)*var(--gutter-sm))}
+  .wkt .mcfig{aspect-ratio:21/9;max-height:220px}  /* short banner, capped: compact */
   .wkt .mcbody{padding:14px 16px 12px;gap:10px}
   .wkt .mc:only-child{grid-template-columns:320px 1fr;grid-template-rows:auto}
   .wkt .mc:only-child .mcfig{aspect-ratio:auto;min-height:170px;border-right:1px solid var(--hairline);border-bottom:none}
