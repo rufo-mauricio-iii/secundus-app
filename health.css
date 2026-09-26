@@ -683,3 +683,15 @@ body { min-height:100%; }
   .wt-stat-goal .wt-v{justify-content:flex-start}
   .wt-main{padding:16px}
 }
+/* The request form and original/proposed recipe cards stay inside Diet. */
+.recipe-workflow { margin: 16px 0; padding: 16px; border: 1px solid var(--border); }
+.recipe-workflow summary { cursor: pointer; font-weight: 600; }
+.recipe-workflow form { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.recipe-workflow textarea { flex-basis: 100%; width: 100%; padding: 10px; color: var(--text); background: var(--bg); }
+.recipe-workflow button, .recipe-workflow select { padding: 8px 12px; }
+.recipe-results article { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+.recipe-results h3 { font-size: 16px; overflow-wrap: anywhere; }
+.recipe-results pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.5; }
+.recipe-comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.recipe-comparison pre { max-height: 600px; overflow: auto; }
+@media (max-width: 700px) { .recipe-comparison { grid-template-columns: 1fr; } }

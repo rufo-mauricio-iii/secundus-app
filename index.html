@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="home.css">
 <link rel="stylesheet" href="health.css">
+<script src="recipe-workflow.js"></script>
 </head>
 <body>
 <!-- gate: shown until this device has a token; the dashboard replaces it -->
@@ -3086,19 +3087,11 @@ const Food = (() => {
         return "Other";
       };
       const roleOf = (m) => m.role === "veg_side" ? "side" : m.role === "carb_side" ? "base" : "main";
-      RECIPES = mealsDb.meals.map(m => {
-        const hasAmounts = (m.ingredients || []).some(e => e.amount);
-        return {
-          id: m.id, name: m.name, subtitle: m.subtitle || null, role: roleOf(m), slot: m.meal_slot,
-          prep_min: m.prep_min || null,
-          base_servings: hasAmounts ? (m.batch_servings || 1) : 1,
-          maxBatch: m.max_batch_servings || null,
-          derived_totals: m.derived_totals || null, tags: m.tags || [],
-          macro_target: m.macro_target || null, versions: m.versions || [],
-          ingredients: m.ingredients.map(e => {
+      function hydrateIngredients(lines) {
+  return lines.map(e => {
             const i = ingById.get(e.ingredient_id) || {};
             return {
-              name: i.name || e.ingredient_id, qty: e.qty, unit: i.unit || "", cat: i.storage || "",
+              ingredient_id: e.ingredient_id, nutrition_missing: [i.calories, i.protein_g, i.carbs_g, i.fat_g].some(v => v == null), name: i.name || e.ingredient_id, qty: e.qty, unit: i.unit || "", cat: i.storage || "",
               amount: e.amount || null,
               basis: i.basis || null, unitSize: i.unit_size || 0, piece: i.piece || null,
               yieldRatio: i.yield_ratio || null, buyBasis: i.buy_basis || null,
@@ -3108,7 +3101,21 @@ const Food = (() => {
               cal: (i.calories || 0) * e.qty, p: (i.protein_g || 0) * e.qty,
               c: (i.carbs_g || 0) * e.qty, f: (i.fat_g || 0) * e.qty
             };
-          }),
+  });
+}
+  RECIPES = mealsDb.meals.map(m => {
+        const hasAmounts = (m.ingredients || []).some(e => e.amount);
+        return {
+          id: m.id, name: m.name, subtitle: m.subtitle || null, role: roleOf(m), slot: m.meal_slot,
+          prep_min: m.prep_total_min || m.prep_min || null, prep_active_min: m.prep_active_min,
+          base_servings: hasAmounts ? (m.batch_servings || 1) : 1,
+          maxBatch: m.max_batch_servings || null,
+          derived_totals: m.derived_totals || null, tags: m.tags || [],
+          macro_target: m.macro_target || null,
+      nutrition_adjustments: m.nutrition_adjustments || [],
+      keeps: m.keeps, reheat: m.reheat, portion: m.portion, sources: m.sources || [],
+      versions: (m.versions || []).map(v => ({ ...v, needs_review: !Array.isArray(v.ingredients) || !v.ingredients.length, ingredients: Array.isArray(v.ingredients) ? hydrateIngredients(v.ingredients) : null })),
+          ingredients: hydrateIngredients(m.ingredients),
           steps: m.steps || (m.method ? [m.method] : [])
         };
       });
@@ -3195,13 +3202,34 @@ const Food = (() => {
       return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
     }
 
-    const TARGETS = (data && data.targets) || { cal_day: 1600, protein_day: 150, meals_per_day: 3 };
-    const MEAL_TARGET = { cal: Math.round(TARGETS.cal_day / TARGETS.meals_per_day), p: Math.round(TARGETS.protein_day / TARGETS.meals_per_day) };
+    const TARGETS = (data && data.targets) || { cal_day: 1600, protein_day: 130, protein_day_range: [130,150], main_meals_per_day: 1 };
+const PROTEIN_RANGE = TARGETS.protein_day_range || [130,150];
+let breakfastId = localStorage.getItem("secundus-food-breakfast") || "";
+function breakfastSelector(host) {
+  const row = host.createDiv({ cls: "psub" });
+  row.createSpan({ text: "Optional day planning: " });
+  const select = row.createEl("select"); select.setAttribute("aria-label", "Breakfast for daily check");
+  const options = RECIPES.filter(r => r.slot === "breakfast");
+  if (!options.some(r => r.id === breakfastId)) breakfastId = "";
+  const none = select.createEl("option", { text: "No day plan — recipe only" }); none.value = "";
+  options.forEach(r => { const option = select.createEl("option", { text: r.name }); option.value = r.id; });
+  select.value = breakfastId;
+  select.onchange = () => { breakfastId = select.value; localStorage.setItem("secundus-food-breakfast", breakfastId); renderPlan(); };
+}
+function dailyRemaining(main) {
+  if (!breakfastId) return null;
+  const breakfast = byId.get(breakfastId), entry = plan.get(breakfastId);
+  const b = breakfast ? plateMacros(breakfast, entry?.qtys, entry?.ver) : { cal: 0, p: 0, incomplete: true };
+  return { calories: TARGETS.cal_day - b.cal - main.cal,
+    protein: Math.max(0, PROTEIN_RANGE[0] - b.p - main.p),
+    incomplete: b.incomplete || main.incomplete, conditional: b.conditional || main.conditional };
+}
     const byId = new Map(RECIPES.map(r => [r.id, r]));
     const maxSrv = r => r.maxBatch || 12;
 
     const filt = { q: "", meal: null, cuisine: new Set(), type: new Set(), maxCost: null, minProtein: null, maxCal: null, inPlan: false, pantry: false };
     const plan = new Map();
+const planWarnings = [];
     const vendorPick = new Map();
     const skipSet = new Set();
     const PLAN_KEY = "secundus-food-plan-v1";
@@ -3220,7 +3248,8 @@ const Food = (() => {
         entries.forEach(([id, e]) => {
           if (!byId.has(id)) return;
           const r = byId.get(id);
-          const ver = e.ver && (r.versions || []).some(v => v.id === e.ver) ? e.ver : null;
+          const ver = e.ver && (r.versions || []).some(v => v.id === e.ver && !v.needs_review) ? e.ver : null;
+      if (e.ver && !ver) planWarnings.push(`${r.name}: saved version needs review; showing base ingredients.`);
           plan.set(id, { servings: e.servings || r.base_servings, ver, qtys: new Map(e.qtys || []) });
         });
         if (!Array.isArray(d)) {
@@ -3286,7 +3315,7 @@ const Food = (() => {
       return e;
     }
     function withQty(ing, q) {
-      const amount = (ing.amount && ing.qty > 0) ? scaleAmount(ing.amount, q / ing.qty) : null;
+      const amount = ing.unitSize > 0 && ing.basis !== "none" ? { [ing.basis === "mass" ? "g" : "ml"]: q * ing.unitSize } : ((ing.amount && ing.qty > 0) ? scaleAmount(ing.amount, q / ing.qty) : null);
       return { ...ing, qty: q, amount, price: ing.per.price * q, cal: ing.per.cal * q, p: ing.per.p * q, c: ing.per.c * q, f: ing.per.f * q };
     }
     function scaleAmount(a, k) {
@@ -3296,43 +3325,43 @@ const Food = (() => {
       if (a.ct != null) { out.ct = a.ct * k; if (a.u) out.u = a.u; }
       return out;
     }
-    const versionOf = (r, verId) => verId ? (r.versions || []).find(v => v.id === verId) : null;
-    function effectiveIngredients(r, qtys) {
-      return r.ingredients.map(ing => {
-        const q = qtys ? qtys.get(ing.name) : undefined;
-        return (q === undefined || q === ing.qty || !ing.per) ? ing : withQty(ing, q);
-      });
-    }
-    function perServing(r, qtys) {
-      const ings = effectiveIngredients(r, qtys);
-      const t = { cal: 0, p: 0, c: 0, f: 0, cost: 0 };
-      for (const i of ings) { t.cal += i.cal || 0; t.p += i.p || 0; t.c += i.c || 0; t.f += i.f || 0; t.cost += i.price || 0; }
-      const n = r.base_servings;
-      return { cal: t.cal / n, p: t.p / n, c: t.c / n, f: t.f / n, cost: t.cost / n };
-    }
+    const versionOf = (r, verId) => verId ? (r.versions || []).find(v => v.id === verId && !v.needs_review && Array.isArray(v.ingredients)) : null;
+    function effectiveIngredients(r, qtys, verId) {
+  const ver = versionOf(r, verId);
+  return ((ver && ver.ingredients) || r.ingredients).map(ing => {
+    const q = qtys ? qtys.get(ing.name) : undefined;
+    return (q === undefined || q === ing.qty || !ing.per) ? ing : withQty(ing, q);
+  });
+}
+    function perServing(r, qtys, verId) {
+  const ings = effectiveIngredients(r, qtys, verId), ver = versionOf(r, verId);
+  const adjustments = (ver ? ver.nutrition_adjustments : r.nutrition_adjustments) || [];
+  const retained = new Map(adjustments.map(a => [a.ingredient_id, a.fat_retained_fraction]));
+  const t = { cal: 0, p: 0, c: 0, f: 0, cost: 0 };
+  for (const i of ings) {
+    const lost = (i.f || 0) * (1 - (retained.get(i.ingredient_id) ?? 1));
+    t.cal += (i.cal || 0) - lost * 9; t.p += i.p || 0; t.c += i.c || 0;
+    t.f += (i.f || 0) - lost; t.cost += i.price || 0;
+  }
+  const n = r.base_servings;
+  return { cal: t.cal/n, p: t.p/n, c: t.c/n, f: t.f/n, cost: t.cost/n,
+    incomplete: ings.some(i => i.qty > 0 && i.nutrition_missing),
+    conditional: adjustments.some(a => a.confidence === "estimate") };
+}
     function targetFit(r, ps) {
-      const t = r.macro_target; if (!t) return null;
-      if (t.kind === "treat") return { cls: "fit-treat", text: "treat" };
-      const calHi = t.calories && t.calories[1];
-      if (!t.protein_g) {
-        if (!calHi) return { cls: "fit-ok", text: `${Math.round(ps.cal)} cal` };
-        return ps.cal <= calHi + 1 ? { cls: "fit-ok", text: "light" } : { cls: "fit-warn", text: `⚠ ${Math.round(ps.cal)} cal` };
-      }
-      const pLo = t.protein_g[0];
-      const okP = ps.p >= pLo - 0.5, okC = !calHi || ps.cal <= calHi + 1;
-      if (okP && okC) return { cls: "fit-ok", text: "✓ on target" };
-      if (!okP) return { cls: "fit-warn", text: `⚠ ${Math.round(ps.p)}/${pLo}g protein` };
-      return { cls: "fit-warn", text: `⚠ ${Math.round(ps.cal)} cal` };
-    }
+  if (ps.incomplete) return { cls: "fit-warn", text: "nutrition incomplete" };
+  if (ps.conditional) return { cls: "fit-warn", text: "estimate-dependent" };
+  const t = r.macro_target;
+  if (!t || t.kind === "unallocated") return { cls: "fit-treat", text: "recipe only; no allocation" };
+  if (t.kind === "treat") return { cls: "fit-treat", text: "treat" };
+  if (t.calories && ps.cal > t.calories[1] + 1) return { cls: "fit-warn", text: `⚠ ${Math.round(ps.cal)} cal` };
+  if (t.calories && ps.cal < t.calories[0] - 1) return { cls: "fit-warn", text: `below allocated calories` };
+  if (t.protein_g && ps.p < t.protein_g[0] - 0.5) return { cls: "fit-warn", text: `⚠ ${Math.round(ps.p)}/${t.protein_g[0]}g protein` };
+  return { cls: "fit-ok", text: "within recipe allocation" };
+}
     function plateMacros(r, qtys, verId) {
-      const ps = perServing(r, qtys);
-      const recipeQty = new Map(r.ingredients.map(i => [i.name, i.qty]));
-      const hasActiveQty = qtys && [...qtys].some(([n, q]) => q !== undefined && q !== recipeQty.get(n));
-      const ver = versionOf(r, verId);
-      const dt = (ver && ver.derived_totals) || r.derived_totals;
-      if (dt && !hasActiveQty) return { cal: dt.calories, p: dt.protein_g, c: dt.carbs_g, f: dt.fat_g, cost: ps.cost };
-      return ps;
-    }
+  return perServing(r, qtys, verId);
+}
     const money = v => "$" + v.toFixed(2);
     const g = v => Math.round(v) + "g";
     function niceNum(n) {
@@ -3371,8 +3400,8 @@ const Food = (() => {
       if (Math.abs(n - 1) < 1e-6) return unit;
       return `${niceNum(n)} × ${unit}`;
     }
-    function plateGrams(r, qtys) {
-      const ings = effectiveIngredients(r, qtys);
+    function plateGrams(r, qtys, verId) {
+      const ings = effectiveIngredients(r, qtys, verId);
       let gg = 0, counted = 0;
       for (const i of ings) {
         if (!i.unitSize || !i.basis || i.basis === "none") continue;
@@ -3380,8 +3409,8 @@ const Food = (() => {
       }
       return { g: gg / r.base_servings, counted, total: ings.length };
     }
-    function plateGramsText(r, qtys) {
-      const w = plateGrams(r, qtys);
+    function plateGramsText(r, qtys, verId) {
+      const w = plateGrams(r, qtys, verId);
       if (!w.counted) return "not weighed";
       const v = `${Math.round(w.g)} g`;
       return w.counted === w.total ? v : `~${v} (${w.counted}/${w.total} lines)`;
@@ -3456,9 +3485,12 @@ const Food = (() => {
     const hl = hdr.createDiv();
     hl.createDiv({ cls: "brand serif", text: "Diet" });
     const hrEl = hdr.createDiv({ cls: "hr" });
-    hrEl.createDiv({ cls: "targetline", text: `target ${MEAL_TARGET.cal} cal · ${MEAL_TARGET.p}g protein · ${TARGETS.meals_per_day} meals / day` });
+    hrEl.createDiv({ cls: "targetline", text: `${PROTEIN_RANGE.join("–")}g protein / day · breakfast + one main meal + snacks` });
+    breakfastSelector(hrEl);
 
     Weight.mount(wrap.createDiv({ cls: "wmount" }), { chartH: 150 });
+
+    RecipeWorkflow.mount(wrap);
 
     const filtersEl = wrap.createDiv({ cls: "filters" });
     const layout = wrap.createDiv({ cls: "layout" });
@@ -3741,7 +3773,7 @@ const Food = (() => {
          with a leader rule carrying the eye across to a value column that is
          right-aligned to the same edge grid-wide. */
       const spec = body.createDiv({ cls: "rspec" });
-      specRow(spec, "amount / serving", plateGramsText(r, inPlan ? plan.get(r.id).qtys : null));
+      specRow(spec, "amount / serving", plateGramsText(r, inPlan ? plan.get(r.id).qtys : null, inPlan ? plan.get(r.id).ver : null));
       specRow(spec, "cost / serving", money(ps.cost));
       specRow(spec, "cooking time", r.prep_min ? `${r.prep_min} min` : "—");
 
@@ -3775,15 +3807,16 @@ const Food = (() => {
       const r = byId.get(id);
       const entry = plan.get(id);
       if (verId == null && entry && entry.ver) verId = entry.ver;
-      modalId = id; modalVer = verId;
+      if (verId && !versionOf(r, verId)) verId = null;
+  modalId = id; modalVer = verId;
       const qtys = entry ? (entry.qtys || new Map()) : (qtyOverride || new Map());
       const servings = entry ? entry.servings : (srvOverride ?? r.base_servings);
       const scale = servings / r.base_servings;
-      const ings = effectiveIngredients(r, qtys);
+      const ings = effectiveIngredients(r, qtys, verId);
       const ver = versionOf(r, verId);
       const ps = plateMacros(r, qtys, verId);
       const mac = { ...ps };
-      const fit = targetFit(r, mac);
+      const fit = targetFit(ver ? { ...r, macro_target: ver.macro_target || r.macro_target } : r, mac);
       const pDanger = !!(fit && fit.cls === "fit-warn" && /protein/.test(fit.text));
 
       modal.empty();
@@ -3797,8 +3830,8 @@ const Food = (() => {
       if (r.subtitle) mhl.createDiv({ cls: "msubt", text: r.subtitle });
       const meta = mhl.createDiv({ cls: "mmeta" });
       meta.createSpan({ cls: "mcost", text: `${money(ps.cost)} / serving` });
-      const prepMin = (ver && ver.prep_min) || r.prep_min;
-      if (prepMin) { meta.createSpan({ cls: "dot", text: " · " }); meta.createSpan({ text: `~${prepMin} min` }); }
+      const prepMin = (ver && (ver.prep_total_min || ver.prep_min)) || r.prep_min;
+      if (prepMin) { meta.createSpan({ cls: "dot", text: " · " }); meta.createSpan({ text: `~${prepMin} min total${(ver ? ver.prep_active_min : r.prep_active_min) != null ? ` · ${ver ? ver.prep_active_min : r.prep_active_min} active` : ""}` }); }
       const close = mh.createEl("button", { cls: "mclose", text: "close" });
       close.onclick = () => closeModal();
 
@@ -3808,12 +3841,15 @@ const Food = (() => {
           const c = vt.createDiv({ cls: "verchip", text: label });
           c.dataset.on = (verId || null) === (vid || null) ? "1" : "0";
           c.onclick = () => {
-            if (plan.has(id)) { plan.get(id).ver = vid; renderAfterPlan(); }
-            openModal(id, vid ?? undefined, srvOverride, qtyOverride);
+            if (plan.has(id)) { plan.get(id).ver = vid; plan.get(id).qtys = new Map(); renderAfterPlan(); }
+            openModal(id, vid ?? undefined, srvOverride, new Map());
           };
         };
         mk(null, "Base");
-        r.versions.forEach(v => mk(v.id, v.name));
+        r.versions.forEach(v => {
+          if (v.needs_review) vt.createSpan({ cls: "fit-warn", text: `${v.name} — needs ingredient review; unavailable` });
+          else mk(v.id, v.name);
+        });
         if (ver && ver.swaps) {
           const sw = vt.createDiv({ cls: "verswap" });
           sw.setText((ver.swaps || []).map(s => `${s.from} → ${s.to}`).join(" · "));
@@ -3821,6 +3857,13 @@ const Food = (() => {
         }
       }
 
+      const adjustments = (ver ? ver.nutrition_adjustments : r.nutrition_adjustments) || [];
+      for (const a of adjustments) modal.createDiv({ cls: "fit-warn", text: `${a.confidence}: ${a.reason} (${Math.round(a.fat_retained_fraction * 100)}% fat retained). ${a.source}` });
+      const saved = ver ? ver.derived_totals : r.derived_totals;
+      const chosenLines = (ver && ver.ingredients) || r.ingredients;
+      const customized = chosenLines.some(i => qtys.has(i.name) && qtys.get(i.name) !== i.qty);
+      if (saved && !customized && (Math.abs(saved.calories - ps.cal) > Math.max(2, ps.cal * .02) || Math.abs(saved.protein_g - ps.p) > Math.max(.5, ps.p * .02))) modal.createDiv({ cls: "fit-warn", text: "Calculated from ingredient quantities. The older saved nutrition estimate differs and needs review." });
+      if (ps.incomplete) modal.createDiv({ cls: "fit-warn", text: "Some ingredient nutrition is missing; these totals are incomplete." });
       const mm = modal.createDiv({ cls: "statrow mstat" });
       stat(mm, "kcal", Math.round(mac.cal));
       stat(mm, "protein", g(mac.p), true, pDanger);
@@ -3828,17 +3871,17 @@ const Food = (() => {
       stat(mm, "fat", g(mac.f));
 
       if (r.macro_target && r.macro_target.protein_g) {
-        const t = r.macro_target; const ok = fit && fit.cls === "fit-ok";
+        const t = (ver && ver.macro_target) || r.macro_target; const ok = fit && fit.cls === "fit-ok";
         const tl = modal.createDiv({ cls: "mtarget" });
         const calPart = t.calories ? `${t.calories[0]}–${t.calories[1]} cal · ` : "";
-        tl.setText(`target ${calPart}${t.protein_g[0]}–${t.protein_g[1]}g protein · `);
+        tl.setText(`target ${calPart}${t.protein_g[0]}g+ protein · `);
         tl.createSpan({ cls: ok ? "fit-ok" : "fit-warn", text: `this plate ${Math.round(mac.cal)} / ${Math.round(mac.p)}g ${ok ? "✓" : "⚠"}` });
       }
 
       const sv = modal.createDiv({ cls: "msrv" });
       const svL = sv.createDiv({ cls: "msrvl" });
       svL.createDiv({ cls: "msrvlab", text: "grams per serving" });
-      svL.createDiv({ cls: "msrvval serif", text: plateGramsText(r, qtys) });
+      svL.createDiv({ cls: "msrvval serif", text: plateGramsText(r, qtys, verId) });
       const svR = sv.createDiv({ cls: "msrvr" });
       svR.createDiv({ cls: "msrvlab", text: "servings" });
       const st = svR.createDiv({ cls: "step" });
@@ -3861,7 +3904,7 @@ const Food = (() => {
       th.createSpan({ cls: "r", text: "unit" });
       th.createSpan({ cls: "r", text: "batch" }); th.createSpan({ cls: "r", text: "price" });
       ings.forEach((i, k) => {
-        const orig = r.ingredients[k];
+        const orig = ((ver && ver.ingredients) || r.ingredients)[k];
         const row = tbl.createDiv({ cls: "ingr" });
         const overridden = qtys.get(orig.name) !== undefined && qtys.get(orig.name) !== orig.qty;
         row.createSpan({ cls: overridden ? "ovr" : "", text: i.name });
@@ -3918,10 +3961,14 @@ const Food = (() => {
       tot.createSpan({ cls: "succ", text: money(ings.reduce((a, i) => a + i.price, 0) * scale) });
 
       modal.createDiv({ cls: "msection serif", text: "Method" + (ver ? ` · ${ver.name}` : "") });
-      const steps = (ver && ver.steps) ? ver.steps : (r.steps || []);
+      const steps = (ver && ver.steps && ver.steps.length) ? ver.steps : (r.steps || []);
       const ol = modal.createDiv({ cls: "msteps" });
       steps.forEach((s, i) => { const li = ol.createDiv({ cls: "mstep" }); li.createSpan({ cls: "mnum", text: String(i + 1).padStart(2, "0") }); li.createSpan({ cls: "mtext", text: s }); });
 
+      if (r.keeps || r.reheat) {
+        modal.createDiv({ cls: "msection serif", text: "Storage and reheating" });
+        modal.createDiv({ cls: "mtext", text: [r.keeps, r.reheat].filter(Boolean).join(" ") });
+      }
       const foot = modal.createDiv({ cls: "mfoot" });
       const add = foot.createEl("button", { cls: "mfootbtn" + (plan.has(id) ? " on" : ""), text: plan.has(id) ? "✓ in plan — remove" : "add to plan" });
       add.onclick = () => {
@@ -3990,38 +4037,36 @@ const Food = (() => {
       }
 
       const planned = [...plan.keys()].map(id => byId.get(id));
+  planWarnings.forEach(message => body.createDiv({ cls: "fit-warn", text: message }));
       const hasMain = planned.some(r => r.role === "main");
       const hasSide = planned.some(r => r.role === "side");
       const hasBase = planned.some(r => r.role === "base");
-      const comp = hasMain && hasSide && hasBase ? { t: "main + side + base ✓", ok: true }
-        : !hasMain ? { t: "pick a main to start", ok: false }
-        : !hasSide && !hasBase ? { t: "add a side + base", ok: false }
-        : !hasBase ? { t: "missing base", ok: false } : { t: "missing side", ok: false };
+      const comp = hasMain ? { t: "main selected; add sides only if needed", ok: true } : { t: "pick a main meal", ok: false };
       const cl = body.createDiv({ cls: "compline" });
       cl.createSpan({ cls: "complab", text: "composition" });
       cl.createSpan({ cls: comp.ok ? "compok" : "compwarn", text: comp.t });
 
       const side = planned.find(r => r.role === "side");
       const base = planned.find(r => r.role === "base");
-      const mains = planned.filter(r => r.role === "main");
+      const mains = planned.filter(r => r.role === "main" && r.slot === "lunch_dinner");
       mains.forEach(main => {
         const parts = [main, side, base].filter(Boolean);
-        const t = parts.reduce((a, r) => { const e = plan.get(r.id); const ps = plateMacros(r, e.qtys, e.ver); return { cal: a.cal + ps.cal, p: a.p + ps.p }; }, { cal: 0, p: 0 });
+        const t = parts.reduce((a, r) => { const e = plan.get(r.id); const ps = plateMacros(r, e.qtys, e.ver); return { cal: a.cal + ps.cal, p: a.p + ps.p, incomplete: a.incomplete || ps.incomplete, conditional: a.conditional || ps.conditional }; }, { cal: 0, p: 0, incomplete: false, conditional: false });
         const label = parts.map(p => p.name).join(" + ");
         const line = body.createDiv({ cls: "mealline" });
         line.createEl("b", { text: label });
-        const calOver = t.cal > MEAL_TARGET.cal;
-        const pShort = t.p < MEAL_TARGET.p;
-        const fitEl = line.createDiv({ cls: "mealfit" });
-        fitEl.createSpan({ cls: calOver ? "fit-over" : "fit-ok", text: `${Math.round(t.cal)} / ${MEAL_TARGET.cal} cal` });
-        fitEl.createSpan({ text: " · " });
-        fitEl.createSpan({ cls: pShort ? "fit-over" : "fit-ok", text: `${Math.round(t.p)} / ${MEAL_TARGET.p}g protein` });
-        fitEl.createSpan({ text: calOver ? " · over target" : pShort ? " · protein short" : " · fits" });
+        const remaining = dailyRemaining(t);
+    const fitEl = line.createDiv({ cls: "mealfit" });
+    fitEl.createSpan({ text: `${Math.round(t.cal)} cal · ${Math.round(t.p)}g protein in this main meal` });
+    fitEl.createSpan({ cls: remaining && (remaining.calories < 0 || remaining.incomplete) ? "fit-over" : "", text: !remaining ? " · recipe only; no daily allocation selected" : remaining.incomplete
+      ? " · daily check incomplete: missing nutrition"
+      : ` · after breakfast, snacks need at least ${Math.ceil(remaining.protein)}g protein; ${Math.round(remaining.calories)} cal remaining` });
+    if (remaining) fitEl.createSpan({ text: `${remaining.conditional ? " · depends on estimated cooking retention" : ""} · snacks must be chosen before calling the day complete` });
       });
 
       const mainSrv = mains.reduce((a, r) => a + plan.get(r.id).servings, 0);
       if (mainSrv) {
-        const days = mainSrv / TARGETS.meals_per_day;
+        const days = mainSrv / (TARGETS.main_meals_per_day || 1);
         const bl = body.createDiv({ cls: "batchline" });
         bl.createSpan({ cls: "bl", text: "days covered" });
         bl.createSpan({ text: `${mainSrv} srv ≈ ${(+days.toFixed(1))} days` });
@@ -4033,7 +4078,7 @@ const Food = (() => {
       for (const [id, entry] of plan) {
         const r = byId.get(id);
         const scale = entry.servings / r.base_servings;
-        for (const i of effectiveIngredients(r, entry.qtys)) {
+        for (const i of effectiveIngredients(r, entry.qtys, entry.ver)) {
           if (!(i.qty > 0)) continue;
           const key = `${i.name}|${i.unit}`;
           const cur = map.get(key) || {
