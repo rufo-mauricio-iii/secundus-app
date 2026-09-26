@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="home.css">
 <link rel="stylesheet" href="health.css">
-<script src="recipe-workflow.js"></script>
+<script src="recipe-workflow.js?v=20260926-cards"></script>
 </head>
 <body>
 <!-- gate: shown until this device has a token; the dashboard replaces it -->
@@ -3112,6 +3112,7 @@ const Food = (() => {
           maxBatch: m.max_batch_servings || null,
           derived_totals: m.derived_totals || null, tags: m.tags || [],
           macro_target: m.macro_target || null,
+          card: m.card || null, planning_mode: m.planning_mode || 'recipe_only',
       nutrition_adjustments: m.nutrition_adjustments || [],
       keeps: m.keeps, reheat: m.reheat, portion: m.portion, sources: m.sources || [],
       versions: (m.versions || []).map(v => ({ ...v, needs_review: !Array.isArray(v.ingredients) || !v.ingredients.length, ingredients: Array.isArray(v.ingredients) ? hydrateIngredients(v.ingredients) : null })),
@@ -3351,7 +3352,7 @@ const planWarnings = [];
     function targetFit(r, ps) {
   if (ps.incomplete) return { cls: "fit-warn", text: "nutrition incomplete" };
   if (ps.conditional) return { cls: "fit-warn", text: "estimate-dependent" };
-  const t = r.macro_target;
+  const t = r.card && r.planning_mode !== 'daily' ? {kind:'unallocated'} : r.macro_target;
   if (!t || t.kind === "unallocated") return { cls: "fit-treat", text: "recipe only; no allocation" };
   if (t.kind === "treat") return { cls: "fit-treat", text: "treat" };
   if (t.calories && ps.cal > t.calories[1] + 1) return { cls: "fit-warn", text: `⚠ ${Math.round(ps.cal)} cal` };
@@ -3835,6 +3836,22 @@ const planWarnings = [];
       const close = mh.createEl("button", { cls: "mclose", text: "close" });
       close.onclick = () => closeModal();
 
+      const card = ver ? ver.card : r.card;
+      if (card) {
+        const altered = ings.some(i => qtys.has(i.name) && qtys.get(i.name) !== ((ver && ver.ingredients) || r.ingredients).find(x => x.name === i.name)?.qty);
+        modal.createDiv({cls:'msection serif',text:'At a glance'});
+        const glance = modal.createDiv({cls:'recipe-answer'});
+        const lines = [
+          ['One serving',altered ? 'Quantities customized; weigh the prepared serving. Recorded serving weights no longer apply.' : card.portion],
+          ['Serving weight',altered ? 'Not determined for these quantities.' : card.serving_weight],
+          ['Recorded time',`${card.active_time} active · ${card.total_time} total`],
+          ['Equipment',card.equipment],['Cooking status',card.cooking_status]
+        ];
+        for (const [label,value] of lines) if(value) {const p=glance.createEl('p');p.createEl('strong',{text:label+': '});p.createSpan({text:value});}
+        for (const warning of card.review || []) glance.createEl('p',{cls:'fit-warn',text:warning});
+        if(card.flavor) {modal.createDiv({cls:'msection serif',text:'Flavor essentials'});const flavor=modal.createDiv({cls:'recipe-answer'});RecipeWorkflow.format(flavor,card.flavor);}
+      }
+
       if (r.versions && r.versions.length) {
         const vt = modal.createDiv({ cls: "vertoggle" });
         const mk = (vid, label) => {
@@ -3870,7 +3887,7 @@ const planWarnings = [];
       stat(mm, "carbs", g(mac.c));
       stat(mm, "fat", g(mac.f));
 
-      if (r.macro_target && r.macro_target.protein_g) {
+      if ((!r.card || r.planning_mode === 'daily') && r.macro_target && r.macro_target.protein_g) {
         const t = (ver && ver.macro_target) || r.macro_target; const ok = fit && fit.cls === "fit-ok";
         const tl = modal.createDiv({ cls: "mtarget" });
         const calPart = t.calories ? `${t.calories[0]}–${t.calories[1]} cal · ` : "";
@@ -3907,7 +3924,7 @@ const planWarnings = [];
         const orig = ((ver && ver.ingredients) || r.ingredients)[k];
         const row = tbl.createDiv({ cls: "ingr" });
         const overridden = qtys.get(orig.name) !== undefined && qtys.get(orig.name) !== orig.qty;
-        row.createSpan({ cls: overridden ? "ovr" : "", text: i.name });
+        row.createSpan({ cls: overridden ? "ovr" : "", text: r.id === 'kima' && i.ingredient_id === 'vinegar_cane' && !ver ? 'Cane vinegar or lemon juice' : i.name });
         const perServingQty = i.qty / r.base_servings;
         const views = unitViews(i, perServingQty * i.unitSize);
         const box = (view) => {
@@ -3961,13 +3978,19 @@ const planWarnings = [];
       tot.createSpan({ cls: "succ", text: money(ings.reduce((a, i) => a + i.price, 0) * scale) });
 
       modal.createDiv({ cls: "msection serif", text: "Method" + (ver ? ` · ${ver.name}` : "") });
-      const steps = (ver && ver.steps && ver.steps.length) ? ver.steps : (r.steps || []);
+      const steps = (ver && ver.steps && ver.steps.length) ? ver.steps : (card?.method_steps || r.steps || []);
+      if(card) modal.createDiv({cls:'mtext',text:`Method describes the recorded ${card.source_batch_servings}-serving batch. Changing serving quantities does not verify cooking time or pan capacity.`});
       const ol = modal.createDiv({ cls: "msteps" });
-      steps.forEach((s, i) => { const li = ol.createDiv({ cls: "mstep" }); li.createSpan({ cls: "mnum", text: String(i + 1).padStart(2, "0") }); li.createSpan({ cls: "mtext", text: s }); });
+      steps.forEach((s, i) => { const li = ol.createDiv({ cls: "mstep" }); li.createSpan({ cls: "mnum", text: String(i + 1).padStart(2, "0") }); RecipeWorkflow.format(li.createDiv({cls:'mtext recipe-answer'}),s); });
 
-      if (r.keeps || r.reheat) {
+      if (card || r.keeps || r.reheat) {
         modal.createDiv({ cls: "msection serif", text: "Storage and reheating" });
-        modal.createDiv({ cls: "mtext", text: [r.keeps, r.reheat].filter(Boolean).join(" ") });
+        modal.createDiv({ cls: "mtext", text: [card?.storage || r.keeps, card?.reheat || r.reheat].filter(Boolean).join(" ") });
+      }
+      if (card?.notes_markdown) {
+        const notes=modal.createEl('details',{cls:'recipe-answer'});
+        notes.createEl('summary',{text:'Cooking notes and evidence'});
+        RecipeWorkflow.format(notes,card.notes_markdown);
       }
       const foot = modal.createDiv({ cls: "mfoot" });
       const add = foot.createEl("button", { cls: "mfootbtn" + (plan.has(id) ? " on" : ""), text: plan.has(id) ? "✓ in plan — remove" : "add to plan" });

@@ -108,5 +108,5 @@ const RecipeWorkflow = (() => {
     };
     refresh.onclick=load;box.ontoggle=()=>{if(box.open&&!loaded)load();};
   }
-  return {mount};
+  return {mount,format};
 })();
