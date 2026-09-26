@@ -688,10 +688,17 @@ body { min-height:100%; }
 .recipe-workflow summary { cursor: pointer; font-weight: 600; }
 .recipe-workflow form { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
 .recipe-workflow textarea { flex-basis: 100%; width: 100%; padding: 10px; color: var(--text); background: var(--bg); }
-.recipe-workflow button, .recipe-workflow select { padding: 8px 12px; }
+.recipe-workflow button, .recipe-workflow select { padding: 8px 12px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+.recipe-workflow button { cursor: pointer; margin-right: 8px; }
+.recipe-workflow button:disabled { opacity: .55; cursor: wait; }
 .recipe-results article { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
 .recipe-results h3 { font-size: 16px; overflow-wrap: anywhere; }
-.recipe-results pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.5; }
+.recipe-answer { overflow-wrap: anywhere; line-height: 1.55; font-weight: normal; }
+.recipe-answer p { margin: 8px 0; }
+.recipe-answer h3, .recipe-answer h4, .recipe-answer h5 { margin: 18px 0 8px; }
+.recipe-table { overflow-x: auto; }
+.recipe-table table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.recipe-table th, .recipe-table td { border: 1px solid var(--border); padding: 7px; text-align: left; }
 .recipe-comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
-.recipe-comparison pre { max-height: 600px; overflow: auto; }
+.recipe-comparison .recipe-answer { max-height: 600px; overflow: auto; }
 @media (max-width: 700px) { .recipe-comparison { grid-template-columns: 1fr; } }
