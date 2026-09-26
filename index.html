@@ -3405,10 +3405,10 @@ const planWarnings = [];
       const ings = effectiveIngredients(r, qtys, verId);
       let gg = 0, counted = 0;
       for (const i of ings) {
-        if (!i.unitSize || !i.basis || i.basis === "none") continue;
+        if (!i.unitSize || i.basis !== "mass" || !(i.qty > 0)) continue;
         gg += i.qty * i.unitSize; counted++;
       }
-      return { g: gg / r.base_servings, counted, total: ings.length };
+      return { g: gg / r.base_servings, counted, total: ings.filter(i => i.qty > 0).length };
     }
     function plateGramsText(r, qtys, verId) {
       const w = plateGrams(r, qtys, verId);
@@ -3774,7 +3774,7 @@ const planWarnings = [];
          with a leader rule carrying the eye across to a value column that is
          right-aligned to the same edge grid-wide. */
       const spec = body.createDiv({ cls: "rspec" });
-      specRow(spec, "amount / serving", plateGramsText(r, inPlan ? plan.get(r.id).qtys : null, inPlan ? plan.get(r.id).ver : null));
+      specRow(spec, "ingredient mass / serving", plateGramsText(r, inPlan ? plan.get(r.id).qtys : null, inPlan ? plan.get(r.id).ver : null));
       specRow(spec, "cost / serving", money(ps.cost));
       specRow(spec, "cooking time", r.prep_min ? `${r.prep_min} min` : "—");
 
@@ -3897,8 +3897,9 @@ const planWarnings = [];
 
       const sv = modal.createDiv({ cls: "msrv" });
       const svL = sv.createDiv({ cls: "msrvl" });
-      svL.createDiv({ cls: "msrvlab", text: "grams per serving" });
+      svL.createDiv({ cls: "msrvlab", text: "ingredient mass / serving" });
       svL.createDiv({ cls: "msrvval serif", text: plateGramsText(r, qtys, verId) });
+      svL.createDiv({ cls: "msrvlab", text: "Gram-based ingredients only; not cooked weight." });
       const svR = sv.createDiv({ cls: "msrvr" });
       svR.createDiv({ cls: "msrvlab", text: "servings" });
       const st = svR.createDiv({ cls: "step" });
