@@ -3113,7 +3113,7 @@ const Food = (() => {
           derived_totals: m.derived_totals || null, tags: m.tags || [],
           macro_target: m.macro_target || null,
           card: m.card || null, planning_mode: m.planning_mode || 'recipe_only',
-      nutrition_adjustments: m.nutrition_adjustments || [],
+      nutrition_adjustments: m.nutrition_adjustments || [], nutrition_review: m.nutrition_review || null,
       keeps: m.keeps, reheat: m.reheat, portion: m.portion, sources: m.sources || [],
       versions: (m.versions || []).map(v => ({ ...v, needs_review: !Array.isArray(v.ingredients) || !v.ingredients.length, ingredients: Array.isArray(v.ingredients) ? hydrateIngredients(v.ingredients) : null })),
           ingredients: hydrateIngredients(m.ingredients),
@@ -3346,7 +3346,7 @@ const planWarnings = [];
   }
   const n = r.base_servings;
   return { cal: t.cal/n, p: t.p/n, c: t.c/n, f: t.f/n, cost: t.cost/n,
-    incomplete: ings.some(i => i.qty > 0 && i.nutrition_missing),
+    incomplete: (ver ? ver.nutrition_review : r.nutrition_review)?.status === "needs_review" || ings.some(i => i.qty > 0 && i.nutrition_missing),
     conditional: adjustments.some(a => a.confidence === "estimate") };
 }
     function targetFit(r, ps) {
@@ -3471,8 +3471,8 @@ const planWarnings = [];
         const e = plan.get(r.id);
         const ps = plateMacros(r, e ? e.qtys : null, e ? e.ver : null);
         if (filt.maxCost != null && ps.cost > filt.maxCost) return false;
-        if (filt.minProtein != null && ps.p < filt.minProtein) return false;
-        if (filt.maxCal != null && ps.cal > filt.maxCal) return false;
+        if (filt.minProtein != null && (ps.incomplete || ps.p < filt.minProtein)) return false;
+        if (filt.maxCal != null && (ps.incomplete || ps.cal > filt.maxCal)) return false;
         if (q) {
           const hay = [r.name, r.subtitle || "", mealLabel(r), ...cuisineTags(r), ...typeTags(r), ...(r.ingredients || []).map(i => i.name)].join(" ").toLowerCase();
           if (!hay.includes(q)) return false;
@@ -3765,10 +3765,10 @@ const planWarnings = [];
       titleBtn.onclick = () => openModal(r.id);
 
       const mac = body.createDiv({ cls: "statrow" });
-      stat(mac, "kcal", Math.round(ps.cal));
-      stat(mac, "protein", g(ps.p), true, pDanger);
-      stat(mac, "carbs", g(ps.c));
-      stat(mac, "fat", g(ps.f));
+      stat(mac, "kcal", ps.incomplete ? "unverified" : Math.round(ps.cal));
+      stat(mac, "protein", ps.incomplete ? "—" : g(ps.p), true, pDanger);
+      stat(mac, "carbs", ps.incomplete ? "—" : g(ps.c));
+      stat(mac, "fat", ps.incomplete ? "—" : g(ps.f));
 
       /* Spec block. Same three rows, same labels, same order on every card,
          with a leader rule carrying the eye across to a value column that is
@@ -3880,14 +3880,14 @@ const planWarnings = [];
       const chosenLines = (ver && ver.ingredients) || r.ingredients;
       const customized = chosenLines.some(i => qtys.has(i.name) && qtys.get(i.name) !== i.qty);
       if (saved && !customized && (Math.abs(saved.calories - ps.cal) > Math.max(2, ps.cal * .02) || Math.abs(saved.protein_g - ps.p) > Math.max(.5, ps.p * .02))) modal.createDiv({ cls: "fit-warn", text: "Calculated from ingredient quantities. The older saved nutrition estimate differs and needs review." });
-      if (ps.incomplete) modal.createDiv({ cls: "fit-warn", text: "Some ingredient nutrition is missing; these totals are incomplete." });
+      if (ps.incomplete) modal.createDiv({ cls: "fit-warn", text: "Nutrition is unverified. This recipe cannot support a daily calorie or protein total until its ingredient and serving issues are resolved." });
       const mm = modal.createDiv({ cls: "statrow mstat" });
-      stat(mm, "kcal", Math.round(mac.cal));
-      stat(mm, "protein", g(mac.p), true, pDanger);
-      stat(mm, "carbs", g(mac.c));
-      stat(mm, "fat", g(mac.f));
+      stat(mm, "kcal", ps.incomplete ? "unverified" : Math.round(mac.cal));
+      stat(mm, "protein", ps.incomplete ? "—" : g(mac.p), true, pDanger);
+      stat(mm, "carbs", ps.incomplete ? "—" : g(mac.c));
+      stat(mm, "fat", ps.incomplete ? "—" : g(mac.f));
 
-      if ((!r.card || r.planning_mode === 'daily') && r.macro_target && r.macro_target.protein_g) {
+      if (!ps.incomplete && (!r.card || r.planning_mode === 'daily') && r.macro_target && r.macro_target.protein_g) {
         const t = (ver && ver.macro_target) || r.macro_target; const ok = fit && fit.cls === "fit-ok";
         const tl = modal.createDiv({ cls: "mtarget" });
         const calPart = t.calories ? `${t.calories[0]}–${t.calories[1]} cal · ` : "";
@@ -4042,7 +4042,7 @@ const planWarnings = [];
         const plus = step.createSpan({ cls: "stepbtn", text: "+" });
         minus.onclick = () => { entry.servings = Math.max(1, entry.servings - 1); renderAfterPlan(); if (modalId === id) openModal(id, modalVer); };
         plus.onclick = () => { entry.servings = Math.min(40, entry.servings + 1); renderAfterPlan(); if (modalId === id) openModal(id, modalVer); };
-        mrow.createSpan({ text: ` srv · ${g(ps.p)} P · ${Math.round(ps.cal)} kcal` });
+        mrow.createSpan({ text: ps.incomplete ? " srv · nutrition unverified" : ` srv · ${g(ps.p)} P · ${Math.round(ps.cal)} kcal` });
         if (entry.servings > maxSrv(r)) row.createDiv({ cls: "prmeta fit-warn", text: `⚠ over kitchen cap ${maxSrv(r)} — split cook sessions` });
         const tweaked = [...(entry.qtys || new Map())].filter(([nm2, q]) => {
           const line = r.ingredients.find(i => i.name === nm2);
@@ -4081,9 +4081,9 @@ const planWarnings = [];
         line.createEl("b", { text: label });
         const remaining = dailyRemaining(t);
     const fitEl = line.createDiv({ cls: "mealfit" });
-    fitEl.createSpan({ text: `${Math.round(t.cal)} cal · ${Math.round(t.p)}g protein in this main meal` });
+    fitEl.createSpan({ text: t.incomplete ? "Main-meal nutrition unverified" : `${Math.round(t.cal)} cal · ${Math.round(t.p)}g protein in this main meal` });
     fitEl.createSpan({ cls: remaining && (remaining.calories < 0 || remaining.incomplete) ? "fit-over" : "", text: !remaining ? " · recipe only; no daily allocation selected" : remaining.incomplete
-      ? " · daily check incomplete: missing nutrition"
+      ? " · daily check incomplete: unresolved nutrition"
       : ` · after breakfast, snacks need at least ${Math.ceil(remaining.protein)}g protein; ${Math.round(remaining.calories)} cal remaining` });
     if (remaining) fitEl.createSpan({ text: `${remaining.conditional ? " · depends on estimated cooking retention" : ""} · snacks must be chosen before calling the day complete` });
       });
