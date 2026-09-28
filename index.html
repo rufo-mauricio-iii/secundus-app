@@ -47,6 +47,33 @@ const store = {
   set repo(v){ localStorage.setItem("secundus.repo", v); },
 };
 
+async function fetchGitHub(url, opts = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(url, { ...opts, signal: controller.signal });
+    // Keep the deadline active while downloading the body, including large files.
+    const body = await res.arrayBuffer();
+    return new Response([204, 205, 304].includes(res.status) ? null : body, {
+      status: res.status, statusText: res.statusText, headers: res.headers,
+    });
+  } catch (e) {
+    if (controller.signal.aborted) throw new Error("GitHub timed out. Check your connection and try again.");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function checkRepoResponse(res, repo) {
+  if (res.status === 401) throw new Error("That token was rejected — it may be expired or mistyped. Enter a valid token to reconnect.");
+  if (res.status === 429 || (res.status === 403 && res.headers.get("x-ratelimit-remaining") === "0"))
+    throw new Error("GitHub's request limit was reached. Wait a few minutes and try again.");
+  if (res.status === 404 || res.status === 403) throw new Error(
+    `This token cannot see ${repo}. On GitHub: Fine-grained tokens → your token → Repository access → add ${repo.split("/")[1]}, Contents = Read and write.`);
+  if (!res.ok) throw new Error(`GitHub returned ${res.status}. Try again in a moment.`);
+}
+
 async function gh(path, opts = {}) {
   const url = path ? `${API}/repos/${store.repo}/${path}` : `${API}/repos/${store.repo}`;
   /* every action in this app is a commit, so the topbar has to say where the
@@ -55,7 +82,7 @@ async function gh(path, opts = {}) {
   const writing = /^(PUT|POST|PATCH|DELETE)$/i.test(opts.method || "GET");
   if (writing) syncBegin();
   try {
-    const res = await fetch(url, {
+    const res = await fetchGitHub(url, {
       ...opts,
       headers: {
         "Authorization": `Bearer ${store.pat}`,
@@ -278,22 +305,34 @@ function syncFail()  { SYNC.inflight = Math.max(0, SYNC.inflight - 1); SYNC.fail
 setInterval(() => { if (SYNC.at && SYNC.inflight === 0 && !SYNC.failed) paintSync(); }, 30000);
 
 async function verifyConnection() {
-  if (!$("sync-dot")) return true;
   try {
     const res = await gh("");
-    if (!res.ok) throw new Error(res.status);
+    checkRepoResponse(res, store.repo);
+    // Metadata access alone does not establish permission to read private files.
+    const contents = await gh("contents");
+    checkRepoResponse(contents, store.repo);
     SYNC.connected = true; paintSync();
     return true;
-  } catch {
+  } catch (e) {
     SYNC.connected = false; paintSync();
-    toast("Repo connection failed — check token", 4000);
-    return false;
+    throw e;
   }
 }
 async function boot() {
   $("gate").hidden = true;
   $("home-v4-root").hidden = false;
-  await Home.mount();
+  try {
+    await Home.mount();
+  } catch (e) {
+    console.error("[site] startup failed", e);
+    $("home-v4-root").hidden = true;
+    $("gate").hidden = false;
+    $("pat").value = store.pat;
+    $("gate-error").textContent = `Could not load your data. ${e.message}`;
+    $("gate-error").hidden = false;
+    $("connect").disabled = false;
+    $("connect").textContent = "Connect";
+  }
 }
 /* Validate at the gate. Accepting a token and only failing two screens later is
    what made a scope problem feel like "it keeps asking for my token". */
@@ -305,18 +344,15 @@ $("connect").onclick = async () => {
   const repo = $("repo-select").value;
   btn.disabled = true; btn.textContent = "Checking…";
   try {
-    const res = await fetch(`${API}/repos/${repo}`, {
+    const res = await fetchGitHub(`${API}/repos/${repo}`, {
       headers: { "Authorization": `Bearer ${pat}`, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
     });
-    if (res.status === 401) throw new Error("That token was rejected — it may be expired or mistyped.");
-    if (res.status === 404 || res.status === 403) throw new Error(
-      `This token cannot see ${repo}. On GitHub: Fine-grained tokens → your token → Repository access → add ${repo.split("/")[1]}, Contents = Read and write. A token that only covers a different repo will fail here.`);
-    if (!res.ok) throw new Error(`GitHub returned ${res.status}. Try again in a moment.`);
+    checkRepoResponse(res, repo);
     const meta = await res.json();
     if (meta.permissions && meta.permissions.push === false)
       throw new Error(`Token reaches ${repo} but is read-only. Set Contents = Read and write.`);
     store.pat = pat; store.repo = repo;
-    boot();
+    await boot();
   } catch (e) {
     errBox.textContent = e.message;
     errBox.hidden = false;
@@ -1603,11 +1639,12 @@ const Home = (() => {
     const root = $('home-v4-root');
     root.innerHTML = MARKUP;
     ROOT = root;
+    $('sync-label').textContent = 'Connecting…';
+    $('sync-dot').classList.add('busy');
     await verifyConnection();
 
     await loadKanban();
     if (!KDB) await showBoardFailure(root);
-    mounted = true;
     await loadQueue();
 
     const habitsDoc = await readJSON(HABITS_PATH, null);
@@ -1641,6 +1678,7 @@ const Home = (() => {
     renderStreaks(root);
     renderCapture(root);
     renderToday(root);
+    mounted = true;
   }
 
   return { mount };
