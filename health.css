@@ -571,3 +571,27 @@ body { min-height:100%; }
 .recipe-comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
 .recipe-comparison .recipe-answer { max-height: 600px; overflow: auto; }
 @media (max-width: 700px) { .recipe-comparison { grid-template-columns: 1fr; } }
+
+/* The same review card appears in Home approvals and the workout workspace. */
+.workout-review { margin: var(--gap-section); padding: var(--gap-section); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--font-body); }
+.workout-review[hidden] { display: none; }
+.workout-review .wr-head, .workout-review .wr-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-block); flex-wrap: wrap; }
+.workout-review .wr-actions { justify-content: flex-start; }
+.workout-review .wr-title { margin: 0; font-size: var(--fs-lead); color: var(--gold); }
+.workout-review .wr-meta, .workout-review .wr-evidence { font-size: var(--fs-dense); color: var(--text-muted); line-height: 1.5; }
+.workout-review .wr-change { padding: var(--gap-block) 0; border-top: 1px solid var(--border); }
+.workout-review h4, .workout-review p { margin: var(--gap-card) 0; }
+.workout-review .wr-prescription { font-family: var(--font-mono); color: var(--gold); }
+.workout-review .wr-note, .workout-review .wr-reason, .workout-review .wr-question { line-height: 1.5; }
+.workout-review .wr-question { font-weight: 600; }
+.workout-review .wr-error { color: var(--err); }
+.workout-review button { min-height: 44px; padding: var(--gap-card) var(--gap-block); border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-surface); color: var(--text); cursor: pointer; font: inherit; }
+.workout-review button:disabled { opacity: .55; cursor: wait; }
+.workout-review .wr-primary { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+.workout-review .wr-quiet { font-size: var(--fs-dense); }
+.workout-review a { color: var(--gold); }
+.workout-review .wr-revision { margin-top: var(--gap-block); }
+.workout-review summary { cursor: pointer; min-height: 44px; line-height: 44px; }
+.workout-review label { display: block; }
+.workout-review textarea { display: block; width: 100%; box-sizing: border-box; min-height: 90px; margin: var(--gap-card) 0; padding: var(--gap-block); font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
+@media (max-width: 600px) { .workout-review { margin: var(--gap-block); } .workout-review .wr-actions button { flex: 1; } }

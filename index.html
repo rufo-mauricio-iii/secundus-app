@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="home.css">
 <link rel="stylesheet" href="health.css">
 <script src="workout-session.js"></script>
+<script src="workout-review.js"></script>
 <script src="recipe-workflow.js?v=20260926-cards"></script>
 </head>
 <body>
@@ -690,7 +691,7 @@ const Home = (() => {
   }
 
   /* ---- approvals ---- */
-  let QUEUE = [];
+  let QUEUE = [], workoutApprovalCount = 0;
   async function loadQueue() { QUEUE = await readJSON(QUEUE_PATH, []); if (!Array.isArray(QUEUE)) QUEUE = []; }
   function staged() { return QUEUE.filter(q => q.stage === 'staged'); }
   async function writeTrigger(action, id) {
@@ -708,8 +709,8 @@ const Home = (() => {
       badge.className = 'd-badge' + (items.length ? ' d-badge-act' : '');
     }
     if (!box) return;
-    if (items.length === 0) { box.innerHTML = `<div class="stub-line">Nothing awaiting you ✓</div>`; return; }
-    box.innerHTML = items.map(q => `
+    if (items.length === 0) box.innerHTML = `<div class="stub-line" data-empty-approvals>Nothing awaiting you ✓</div>`;
+    if (items.length) box.innerHTML = items.map(q => `
       <div class="appr-row" data-qid="${esc(q.id)}">
         <div class="appr-head">
           <div class="info"><div class="name">${esc(q.task || q.id)}</div><div class="meta">${esc(q.org || '')}</div></div>
@@ -723,13 +724,19 @@ const Home = (() => {
           </div>
         </div>
       </div>`).join('');
+    const workoutReview = document.createElement('div'); box.appendChild(workoutReview);
+    WorkoutReview.mount(workoutReview, { onPendingChange: count => {
+      workoutApprovalCount = count; renderScoreboard(root);
+      if (badge) { badge.textContent = items.length + count; badge.className = 'd-badge' + (items.length + count ? ' d-badge-act' : ''); }
+      const empty = box.querySelector('[data-empty-approvals]'); if (empty) empty.hidden = count > 0;
+    } });
   }
 
   /* ---- scoreboard ---- */
   function renderScoreboard(root = ROOT) {
     const box = root.querySelector('#scoreboard');
     if (!box) return;
-    const seals = staged().length;
+    const seals = staged().length + workoutApprovalCount;
     let overdue = 0, dueToday = 0, due7 = 0;
     for (const c of (KDB ? KDB.cards : [])) {
       if (c.lane === 'done' || !c.due) continue;
@@ -2672,6 +2679,7 @@ const Workout = (() => {
     if (week.review_due) el(dates, "span", null, `Review due ${formatDate(week.review_due)}`);
     if (week.review_due && DATE > week.review_due) { plan.classList.add("uw-stale"); el(dates, "span", null, "Plan needs review"); }
     button(plan, "Full plan & notes", overview, "uw-quiet");
+    WorkoutReview.mount(el(root, "div"));
     host = el(root, "div");
     statusEl = el(root, "p", "uw-status uw-small"); statusEl.setAttribute("role", "status"); statusEl.setAttribute("aria-live", "polite");
     dialog = makeDialog("Workout detail"); dialogBody = dialog.body; weightDialog = makeDialog("Bodyweight", true);
