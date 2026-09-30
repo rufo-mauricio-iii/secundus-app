@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="home.css">
 <link rel="stylesheet" href="health.css">
+<script src="workout-session.js"></script>
 <script src="recipe-workflow.js?v=20260926-cards"></script>
 </head>
 <body>
@@ -1714,9 +1715,8 @@ const Weight = (() => {
     const d = new Date(), p = n => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   }
-  const fmtShort = d => new Date(T(d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-  const fmtDay   = d => new Date(T(d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-  const fmtLong  = d => new Date(T(d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  const fmtShort = WorkoutSession.formatDate;
+  const fmtDay = fmtShort, fmtLong = fmtShort;
   const sign = v => (v > 0 ? "+" : "−") + Math.abs(v).toFixed(1);
 
   let doc = null, loading = null;
@@ -1788,8 +1788,8 @@ const Weight = (() => {
     if (es.length < 2) return svg;
     const t0 = es[0].t, tLast = es[es.length - 1].t;
     svg.setAttribute("aria-label",
-      `Body weight ${es[0].date} to ${es[es.length - 1].date}, ${es[0].lbs} to ${es[es.length - 1].lbs} pounds`
-      + (tHit ? `, on trend to reach ${tgt} on ${isoOf(tHit)}` : ""));
+      `Body weight ${fmtLong(es[0].date)} to ${fmtLong(es[es.length - 1].date)}, ${es[0].lbs} to ${es[es.length - 1].lbs} pounds`
+      + (tHit ? `, on trend to reach ${tgt} on ${fmtLong(isoOf(tHit))}` : ""));
 
     const hi = Math.max(...es.map(e => e.lbs)), lo = Math.min(...es.map(e => e.lbs));
     const y0 = Math.min(tgt - 1.5, lo - 1), y1 = Math.ceil(hi) + 1;
@@ -2036,7 +2036,7 @@ const Weight = (() => {
         const mid = el(step, "div", "wt-draft");
         /* the number is typeable — twenty taps of ± for a two-pound miss is not a flow */
         const inp = el(mid, "input", "wt-draftin"); inp.value = Number(draft).toFixed(1); inp.setAttribute("inputmode", "decimal");
-        inp.setAttribute("aria-label", "Weight in pounds for " + cursor);
+        inp.setAttribute("aria-label", "Weight in pounds for " + fmtLong(cursor));
         inp.oninput = e => { draft = e.target.value; };
         inp.onkeydown = e => {
           if (e.key === "Enter") { e.preventDefault(); commit(confirmVal != null); }
@@ -2091,7 +2091,7 @@ const Weight = (() => {
         if (daysLeft > 0) { const need = (last.lbs - tgt) / (daysLeft / 7);
           rNeed.v.textContent = `${need.toFixed(1)} lb/wk · ${daysLeft}d left`; rNeed.v.dataset.tone = need > 2 ? "warn" : "ok"; }
         else rNeed.v.textContent = `${fmtShort(pd)} passed`;
-        rNeed.r.title = `Plan date ${pd} — target_date in weight-log.json`;
+        rNeed.r.title = `Plan date ${fmtLong(pd)}`;
       } else rNeed.v.textContent = "no plan date";
 
       if (editing && wantFocus !== ".wt-goalin") wantFocus = ".wt-draftin";
@@ -2132,7 +2132,7 @@ const Weight = (() => {
 })();
 
 /* ====================================================================
-   WORKOUT — faithful port of orgs/health/Workout.md (Renovatio skin).
+   WORKOUT — unified session workspace.
    Same files, same entry schema; the PC widget and /workout-review
    read what this writes. Append-only log: one JSON per movement/day.
    ==================================================================== */
@@ -2173,15 +2173,14 @@ function createWorkoutOutbox(storage, key, save, saved, failed) {
 const Workout = (() => {
   const WEEK_PATH     = "orgs/health/data/workout/workout-week.json";
   const LOG_DIR       = "orgs/health/data/workout/workout-log";
-  const LOG_PATH      = "orgs/health/data/workout/workout-log.json";
   const SESSIONS_PATH = "orgs/health/data/workout/workout-sessions.json";
   const NOTES_PATH    = "orgs/health/data/workout/workout-review-notes.json";
 
   let mounted = false, week = null, log = [], sessions = {}, notes = {};
-  let root, host, tabEls = [], gearEls = {}, lightbox = null;
+  let root, host, tabEls = [];
 
   /* ---- helpers straight from the widget ---- */
-  const cleanName = n => String(n).replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  const cleanName = WorkoutSession.cleanName;
   function slug(s) {
     s = String(s).replace(/\(.*?\)/g, "").trim().toLowerCase();
     s = s.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -2195,16 +2194,6 @@ const Workout = (() => {
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   }
   const fmt = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  function parseSeconds(txt) {
-    const t = String(txt || "").trim().toLowerCase();
-    const mm = t.match(/^(\d+):(\d{1,2})$/);
-    if (mm) return parseInt(mm[1], 10) * 60 + parseInt(mm[2], 10);
-    const sec = t.match(/(\d+)\s*(?:s|sec)\b/);
-    if (sec) return parseInt(sec[1], 10);
-    const min = t.match(/(\d+)\s*(?:m|min)\b/);
-    if (min) return parseInt(min[1], 10) * 60;
-    return null;
-  }
   function beep(freq = 880, ms = 200) {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return;
@@ -2214,7 +2203,7 @@ const Workout = (() => {
       o.stop(ac.currentTime + ms / 1000); setTimeout(() => ac.close(), ms + 220);
     } catch (e) {}
   }
-  const numFrom = s => { const m = String(s || "").match(/-?\d+(?:\.\d+)?/); return m ? m[0] : ""; };
+  const numFrom = s => /^\s*~?\s*\d/.test(String(s || "")) ? (String(s).match(/\d+(?:\.\d+)?/) || [""])[0] : "";
   const roundLabel = n => `${n} round${n === 1 ? "" : "s"}`;
 
   /* These were labelled Base / Easy / Room / Lazy under the heading "Intensity",
@@ -2224,34 +2213,12 @@ const Workout = (() => {
     { id: "red", label: "Full" }, { id: "blue", label: "Short" },
     { id: "room", label: "No kit" }, { id: "blue-r", label: "Just move" },
   ];
-  const roundsForGear = g => g === "red" ? 3 : g === "blue" ? 2 : g === "room" ? 1 : 0;
-  function restSecFor(block, indexInBlock = 0) {
-    if (block === "warmup") return 30;
-    if (block === "ss") return indexInBlock === 0 ? 90 : 60;
-    if (block === "finisher") return 60;
-    return null;
-  }
-  const defaultLogMode = block =>
-    (block === "warmup" || block === "cool") ? "none" : block === "ss" ? "full" : "check";
-  function fmtHeaderDate(d) {
-    /* matches the top bar and the Today rail — one date format in the app */
-    const days = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
-    const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-    return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
-  }
-  const focusOf = day => (String(day.title || "").split("—")[1] || day.type || "").trim();
-
   /* ---- state ---- */
   let DATE = todayISO(), WW = {}, logIndex = new Map();
   let gear = "red", active = 0;
-  let holdInterval = null, holdBtn = null;
-  /* Plan is the page you read; Focus is the player you train from — one
-     movement at a time, the rest of the session in a sidebar. */
-  let view = "plan";
-  const VIEW_KEY = "wkt-view", FOCUS_KEY = "wkt-focus";
 
   function historyFor(canon) {
-    return log.filter(e => e.exercise === canon && e.date < DATE && (e.weight || e.reps))
+    return log.filter(e => e.exercise === canon && e.date < DATE && (e.weight || e.reps || e.time || e.done))
               .sort((a, b) => a.date.localeCompare(b.date));
   }
   const lastLogged = canon => { const h = historyFor(canon); return h.length ? h[h.length - 1] : null; };
@@ -2308,6 +2275,9 @@ const Workout = (() => {
     enqueue(k, { kind: "movement", path: entryPath(DATE, dayKey, exercise),
       date: DATE, day: dayKey, exercise,
       patch: { ...(existing?.patch || {}), ...patch, gear } });
+    const current = { ...logIndex.get(k), ...patch, gear, date: DATE, day: dayKey, exercise };
+    logIndex.set(k, current);
+    log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k).concat([current]);
   }
   async function flushSaves() {
     if (saveTimer) clearTimeout(saveTimer);
@@ -2316,14 +2286,6 @@ const Workout = (() => {
     if (!ok && !saveTimer) saveTimer = setTimeout(flushSaves, 30000);
     return ok;
   }
-  async function writeSessions() {
-    for (const [key, value] of Object.entries(localSessionTouches)) {
-      enqueue(`session:${key}`, { kind: "session", path: SESSIONS_PATH, key, value });
-      delete localSessionTouches[key];
-    }
-    return flushSaves();
-  }
-  const localSessionTouches = {};
   /* free-form feedback per day, keyed like sessions: `${DATE}__${dayKey}` */
   async function writeNote(k, text) {
     enqueue(`feedback:${k}`, { kind: "feedback", path: NOTES_PATH, key: k, value: text });
@@ -2371,703 +2333,354 @@ const Workout = (() => {
     if (ensureOutbox().pending.size) saveTimer = setTimeout(flushSaves, 600);
   }
 
-  /* ---- UI (ported) ---- */
+  /* One workspace: the outline, movement editor, and overview share a model. */
+  const { formatDate, prescription, target, isBodyweight, seconds } = WorkoutSession;
+  const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  let model, state, ui = {}, activeClock = null, dialog, dialogBody, weightDialog;
+  let titleEl, subtitleEl, kickerEl, statusEl, gearSelect;
+  const uiKey = () => `wkt-workspace:${store.repo}:${DATE}:${week.week_start}`;
+  const stateKey = () => `${week.days[active].key}|${gear}`;
+  function saveUI() {
+    try { localStorage.setItem(uiKey(), JSON.stringify(ui)); return true; }
+    catch (_) { announce("Device storage failed. Keep this page open; progress could not be saved."); return false; }
+  }
+  function announce(message) { if (statusEl) statusEl.textContent = message; }
+  function button(parent, text, onClick, cls = "") {
+    const b = el(parent, "button", `uw-button ${cls}`, text); b.type = "button"; b.onclick = onClick; return b;
+  }
+  function stopAllClocks() { if (activeClock) { activeClock(); activeClock = null; } }
+  function finishClock() { beep(660, 300); if (navigator.vibrate) { try { navigator.vibrate([120, 60, 120]); } catch (_) {} } }
+  function makeDialog(title, wide = false) {
+    const panel = el(root, "dialog", `uw-dialog${wide ? " uw-dialog-wide" : ""}`);
+    panel.setAttribute("aria-label", title);
+    const head = el(panel, "div", "uw-dialog-head");
+    const heading = el(head, "h2", "uw-title", title);
+    button(head, "Close", () => panel.close());
+    const body = el(panel, "div", "uw-dialog-body");
+    let returnFocus;
+    panel.addEventListener("close", () => { if (returnFocus?.isConnected) returnFocus.focus(); });
+    return { panel, heading, body, open() { returnFocus = document.activeElement; panel.showModal(); } };
+  }
   function openLightbox(src, alt) {
-    if (!lightbox) {
-      lightbox = el(root, "div", "lightbox");
-      lightbox._img = el(lightbox, "img");
-      lightbox._cap = el(lightbox, "div", "cap");
-      lightbox.onclick = () => lightbox.classList.remove("on");
-    }
-    lightbox._img.src = src; lightbox._img.alt = alt || "";
-    lightbox._cap.textContent = alt || "";
-    lightbox.classList.add("on");
+    dialog.heading.textContent = alt;
+    dialogBody.textContent = "";
+    const img = el(dialogBody, "img", "uw-enlarged"); img.src = src; img.alt = `${alt} form reference`;
+    dialog.open();
   }
-
-  function startHold(dayKey, canon, sec, btn) {
-    if (holdInterval) {
-      clearInterval(holdInterval); holdInterval = null;
-      if (holdBtn) { holdBtn.classList.remove("run"); holdBtn.textContent = holdBtn._idle || ""; }
-    }
-    /* a hold and a rest are both "the clock" — starting one ends the other */
-    stopAllClocks();
-    claimClock({ stop() {
-      if (holdInterval) { clearInterval(holdInterval); holdInterval = null; }
-      if (holdBtn) { holdBtn.classList.remove("run"); holdBtn.textContent = holdBtn._idle || ""; holdBtn = null; }
-    } });
-    let rem = sec; holdBtn = btn;
-    btn.classList.add("run"); btn.classList.remove("fin"); btn.textContent = fmt(rem);
-    holdInterval = setInterval(() => {
-      rem -= 1;
-      if (rem <= 0) {
-        clearInterval(holdInterval); holdInterval = null;
-        btn.classList.remove("run"); btn.classList.add("fin");
-        btn._idle = `✓ ${sec}s`; btn.textContent = btn._idle;
-        holdBtn = null; activeClock = null;
-        restOver();
-        queueSave(dayKey, canon, { time: `${sec}s` });
-      } else { btn.textContent = fmt(rem); }
-    }, 1000);
+  function prose(parent, content) {
+    if (Array.isArray(content)) { const list = el(parent, "ol", "uw-prose"); content.forEach(text => el(list, "li", null, text)); }
+    else if (content) el(parent, "p", "uw-prose", content);
   }
-
-  /* ---- rest clocks ---------------------------------------------------------
-     Two rests matter in this plan and they are not the same thing. Between
-     EXERCISES you pause on one movement before the next — that is the per-card
-     button, and it belongs only to one-pass lists (30s in the warm-up) and to
-     the finisher. It must NOT appear inside a superset: there the paired
-     exercise is the rest, and a button between the two halves quietly converts
-     the pair into straight sets. Between ROUNDS you finish both halves and rest
-     before going again — that is the set bar, which also has to know which
-     round you are on.
-
-     Counting down from a deadline rather than decrementing a variable: phone
-     browsers throttle timers in a backgrounded tab, and a naive counter drifts
-     badly while you are actually resting with the screen off. */
-  function countdown(sec, onTick, onDone) {
-    const end = Date.now() + sec * 1000;
-    let iv = null;
-    const tick = () => {
-      const rem = Math.max(0, Math.round((end - Date.now()) / 1000));
-      onTick(rem);
-      if (rem <= 0) { clearInterval(iv); iv = null; onDone(); }
-    };
-    iv = setInterval(tick, 250);
-    tick();
-    return { cancel() { if (iv) { clearInterval(iv); iv = null; } } };
-  }
-  /* one clock at a time. A rest ticking on a card you have scrolled past, while
-     another runs somewhere else, is how you lose the thread of a session. */
-  let activeClock = null;
-  function claimClock(c) { if (activeClock && activeClock !== c) activeClock.stop(false); activeClock = c; }
-  function releaseClock(c) { if (activeClock === c) activeClock = null; }
-  function stopAllClocks() { if (activeClock) { activeClock.stop(false); activeClock = null; } }
-  function restOver() {
-    beep(660, 300);
-    /* the phone is usually face-down on the bench — the buzz is the real signal */
-    if (navigator.vibrate) { try { navigator.vibrate([120, 60, 120]); } catch (e) {} }
-  }
-
-  /* between exercises — press to run it down, press again to cancel */
-  function restButton(parent, sec, label) {
-    const b = el(parent, "button", "rest");
-    const idle = label ? `${label} ${sec}s` : `rest ${sec}s`;
-    b.textContent = idle;
-    let timer = null;
-    const stop = (done) => {
-      if (timer) { timer.cancel(); timer = null; }
-      releaseClock(handle);
-      b.classList.remove("run"); b.classList.toggle("fin", !!done);
-      b.textContent = done ? `✓ ${sec}s` : idle;
-    };
-    const handle = { stop };
-    b.onclick = () => {
-      if (timer) { stop(false); return; }
-      claimClock(handle);
-      b.classList.add("run"); b.classList.remove("fin");
-      timer = countdown(sec, r => { b.textContent = fmt(r); }, () => { restOver(); stop(true); });
-    };
-    return b;
-  }
-
-  /* between sets. A round is one pass through the block, so the round counter
-     and the rest are the same control: finishing a round starts the rest.
-     Progress is keyed by day + block so switching tabs and back keeps it. */
-  const roundState = new Map();
-  function setBar(parent, key, total, restSec) {
-    const bar = el(parent, "div", "setbar");
-    const pips = el(bar, "div", "setpips");
-    const lbl  = el(bar, "span", "setlbl");
-    const btn  = el(bar, "button", "setbtn");
-    let timer = null;
-    const doneCount = () => Math.min(total, roundState.get(key) || 0);
-    const paintPips = () => {
-      const n = doneCount();
-      pips.textContent = "";
-      for (let i = 0; i < total; i++) el(pips, "span", "setpip" + (i < n ? " on" : ""));
-    };
-    const paint = () => {
-      const n = doneCount();
-      paintPips();
-      if (timer) return;                        // the resting state paints itself
-      if (n >= total) {
-        bar.dataset.done = "1";
-        lbl.textContent = `${total} of ${total} done`;
-        btn.textContent = "Start over";
-      } else {
-        delete bar.dataset.done;
-        lbl.textContent = `Round ${n + 1} of ${total}`;
-        btn.textContent = restSec ? `Done · rest ${restSec}s` : "Round done";
-      }
-    };
-    const stop = () => {
-      if (timer) { timer.cancel(); timer = null; }
-      releaseClock(handle);
-      delete bar.dataset.resting;
-      paint();
-    };
-    const handle = { stop };
-    btn.onclick = () => {
-      if (timer) { stop(); return; }            // press again to skip the rest
-      const n = doneCount();
-      if (n >= total) { roundState.set(key, 0); paint(); return; }
-      roundState.set(key, n + 1);
-      /* nothing to rest for after the last round — the block is finished */
-      if (n + 1 >= total || !restSec) { paint(); restOver(); return; }
-      claimClock(handle);
-      bar.dataset.resting = "1";
-      paintPips();                              // the round you just finished lights now, not when the rest ends
-      lbl.textContent = "Resting";
-      timer = countdown(restSec, r => { btn.textContent = fmt(r); }, () => { restOver(); stop(); });
-    };
-    paint();
-    return bar;
-  }
-
-  /* one card, three bodies (Claude Design "Workout Focus", Plan frame):
-       full  — banner, name + target, cues on one line, weight/reps inputs (the lifts)
-       hold/check/none — banner, name over target, hold or rest button on the right
-       row   — thumbnail + name over target + rest, for the warm-up list */
-  function movementCard(parent, dayKey, item, opts) {
-    const canon = cleanName(item.n);
-    const meta  = resolveMovement(item.n) || {};
-    const mode  = item.log || opts.mode || "check";
-    const saved = logIndex.get(entryKey(DATE, dayKey, canon)) || {};
-
-    const card = el(parent, "div", "mc" + (opts.row ? " mcrow" : ""));
-    const fig = el(card, "div", "mcfig");
-    const imgPath = Array.isArray(meta.form) ? meta.form[0] : meta.form;
-    const ph = el(fig, "div", "mcph", `${canon} — form`);
-    if (imgPath) {
-      imageURL(imgPath).then(u => {
-        ph.remove();
-        const img = el(fig, "img"); img.src = u; img.alt = `${canon} form`; img.loading = "lazy";
-        fig.onclick = () => openLightbox(u, canon);
-      }).catch(() => {});
-    }
-
-    const body = el(card, "div", "mcbody" + (mode === "full" ? "" : " row"));
-    const head = el(body, "div", "mchead");
-    el(head, "div", "mcname", canon);
-    const load = item.l || meta.load || "";
-    const reps = item.r || meta.reps || "";
-    const showLoad = load && !/^bodyweight$/i.test(load.trim());
-    const rx = [showLoad ? load : "", reps].filter(Boolean).join(" × ");
-    if (rx) el(head, "span", "mcrx" + (/calibrate/i.test(rx) ? " warn" : ""), rx);
-
-    if (mode === "full") {
-      if (Array.isArray(meta.cues) && meta.cues.length) el(body, "div", "mccueline", meta.cues.join(" · "));
-      const last = lastLogged(canon);
-      const ctrl = el(body, "div", "mcctrl");
-      const wf = el(ctrl, "label", "field");
-      el(wf, "span", "fieldlab", "Weight kg");
-      const wIn = el(wf, "input", "inp");
-      wIn.type = "text"; wIn.inputMode = "decimal"; wIn.placeholder = "—";
-      wIn.value = (saved.weight != null && saved.weight !== "") ? saved.weight
-                : (last && last.weight ? last.weight : numFrom(load));
-      const rf = el(ctrl, "label", "field reps");
-      el(rf, "span", "fieldlab", "Reps");
-      const rIn = el(rf, "input", "inp");
-      rIn.type = "text"; rIn.inputMode = "numeric"; rIn.placeholder = "—";
-      rIn.value = (saved.reps != null && saved.reps !== "") ? saved.reps
-                : (last && last.reps ? last.reps : numFrom(reps));
-      const push = () => queueSave(dayKey, canon, { weight: wIn.value.trim(), reps: rIn.value.trim() });
-      for (const i of [wIn, rIn]) { i.addEventListener("change", push); i.addEventListener("blur", push); }
-      if (opts.rest) restButton(body, opts.rest);
-    } else if (mode === "hold") {
-      const sec = parseSeconds(item.r) ?? parseSeconds(meta.reps);
-      if (sec) {
-        const btn = el(body, "button", "hold", saved.time ? `✓ ${saved.time}` : `▶ ${sec}s`);
-        btn._idle = btn.textContent;
-        if (saved.time) btn.classList.add("fin");
-        btn.onclick = () => startHold(dayKey, canon, sec, btn);
-      } else {
-        el(body, "span", "trendlab", "timed hold — no duration parsed");
-      }
-    } else if (opts.rest) {
-      restButton(body, opts.rest);
-    }
-    return card;
-  }
-
-  function movementGrid(parent, dayKey, items, opts) {
-    const grid = el(parent, "div", opts.row ? "rows" : `grid c${opts.cols || 2}`);
-    (items || []).forEach((it, i) => movementCard(grid, dayKey, it, { ...opts, index: i }));
-    return grid;
-  }
-  function sectionHead(parent, title, meta) {
-    const s = el(parent, "div", "section");
-    const h = el(s, "div", "shead");
-    el(h, "span", "stitle", title);
-    el(h, "div", "srule");
-    if (meta) el(h, "span", "smeta", meta);
-    return s;
-  }
-  function yogaRow(parent, dayKey) {
-    const canon = "Yoga";
-    const box = el(parent, "div", "yoga");
-    const saved = logIndex.get(entryKey(DATE, dayKey, canon)) || {};
-    const tick = el(box, "button", "tick", saved.done ? "✓" : "");
-    tick.dataset.on = saved.done ? "1" : "0";
-    tick.onclick = () => {
-      const on = tick.dataset.on !== "1";
-      tick.dataset.on = on ? "1" : "0"; tick.textContent = on ? "✓" : "";
-      queueSave(dayKey, canon, { done: on });
-    };
-    el(box, "span", "yogatxt", "Yoga / mobility — counts as the day's mobility");
-  }
-  function feedbackBox(parent, dayKey) {
-    const k = sessionKey(DATE, dayKey);
-    const box = el(parent, "div", "fb");
-    const ta = el(box, "textarea");
-    ta.placeholder = "Feedback — what felt light, what felt heavy, any niggles";
-    ta.value = notes[k] || "";
-    // Persist each keystroke locally; only the network flush is debounced.
-    ta.oninput = () => writeNote(k, ta.value.trim());
-    ta.onblur = () => flushSaves();
-  }
-  function sessionBar(parent, dayKey) {
-    const bar = el(parent, "div", "sessionbar");
-    const k = sessionKey(DATE, dayKey);
-    const btn = el(bar, "button", "sessionbtn");
-    const paint = () => {
-      const on = !!sessions[k];
-      btn.dataset.on = on ? "1" : "0";
-      btn.textContent = on ? `✓ Session complete · ${DATE}` : "Mark session complete";
-    };
-    paint();
-    btn.onclick = async () => {
-      if (saveTimer) { clearTimeout(saveTimer); await flushSaves(); }
-      const on = !sessions[k];
-      if (on) sessions[k] = true; else delete sessions[k];
-      localSessionTouches[k] = on;
-      paint();
-      await writeSessions();
-      paint();
-    };
-  }
-
-  /* ---- Focus player -------------------------------------------------------
-     The plan flattened into steps: warm-up one pass, each superset R rounds
-     of its pair, finisher R rounds (or per-item rounds), cool-down one pass,
-     then feedback + mark complete. Rest lives on the step that precedes it,
-     so "Done" on the last half of a round runs the between-rounds clock. */
-  const shortName = n => String(n).replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim();
-  function buildSteps(d) {
-    const rounds = roundsForGear(gear), showRounds = Math.max(1, rounds);
-    const room = (gear === "room" && week.room_session) ? week.room_session : null;
-    const src = room || d;
-    const steps = [];
-    /* block labels carry gym directions in parentheses — the cards show them, the player does not */
-    const push = (block, label, item, extra) => steps.push({ block, label: shortName(label), item, canon: cleanName(item.n),
-      meta: resolveMovement(item.n) || {}, mode: item.log || defaultLogMode(block), ...extra });
-    if (gear === "blue-r" && d.type === "strength" && d.just_move) {
-      steps.push({ block: "jm", label: "Just move", title: d.just_move.title, items: d.just_move.items || [], mode: "none" });
-      steps.push({ block: "end", label: "Finish", mode: "none" });
-      return steps;
-    }
-    (src.warmup || []).forEach((it, i, a) => push("warmup", "Warm-up", it, { rest: i < a.length - 1 ? restSecFor("warmup") : 0 }));
-    if (src.engine) steps.push({ block: "engine", label: "Engine", prose: src.engine, mode: "none" });
-    (src.ss || []).forEach((blk, bi) => {
-      const r = room ? (blk.rounds ?? showRounds) : showRounds;
-      const rest = room ? (blk.rest ?? 60) : restSecFor("ss", bi);
-      for (let round = 1; round <= r; round++)
-        (blk.ex || []).forEach((it, i, a) => push("ss", blk.label || `Superset ${bi + 1}`, it,
-          { round, rounds: r, pos: i + 1, of: a.length, rest: (i === a.length - 1 && round < r) ? rest : 0, key: `${d.key}|${gear}|ss${bi}` }));
-    });
-    const fin = src.finisher || [];
-    if (fin.length) {
-      const label = d.type === "engine" && !room ? "Core" : "Finisher";
-      const perItem = fin.some(f => f.rounds);
-      if (perItem) fin.forEach(it => { const r = it.rounds || 1;
-        for (let round = 1; round <= r; round++) push("finisher", label, it, { round, rounds: r, pos: 1, of: 1, rest: round < r ? restSecFor("finisher") : 0 }); });
-      else for (let round = 1; round <= showRounds; round++)
-        fin.forEach((it, i, a) => push("finisher", label, it,
-          { round, rounds: showRounds, pos: i + 1, of: a.length, rest: (i === a.length - 1 && round < showRounds) ? restSecFor("finisher") : 0, key: `${d.key}|${gear}|fin` }));
-    }
-    (src.cool || []).forEach(it => push("cool", "Cool-down", it, { rest: 0 }));
-    steps.push({ block: "end", label: "Finish", mode: "none" });
-    return steps;
-  }
-  const rxOf = s => {
-    const load = s.item.load_override ?? s.meta.load ?? s.item.l ?? "", reps = s.item.r || s.meta.reps || "";
-    const showLoad = load && !/^bodyweight$/i.test(load.trim());
-    return [showLoad ? load : "", reps].filter(Boolean).join(" × ");
-  };
-  function focusPos(d, n) {
-    try { const s = JSON.parse(localStorage.getItem(FOCUS_KEY) || "null");
-      if (s && s.date === DATE && s.key === `${d.key}|${gear}` && s.pos >= 0 && s.pos < n) return s.pos; } catch (_) {}
-    return 0;
-  }
-  const saveFocusPos = (d, pos) => { try { localStorage.setItem(FOCUS_KEY, JSON.stringify({ date: DATE, key: `${d.key}|${gear}`, pos })); } catch (_) {} };
-
-  async function renderFocus() {
-    stopAllClocks();
-    if (holdInterval) { clearInterval(holdInterval); holdInterval = null; holdBtn = null; }
-    if (saveTimer) { clearTimeout(saveTimer); await flushSaves(); }
-    host.textContent = "";
-    const d = week.days[active];
-    const steps = buildSteps(d);
-    let pos = focusPos(d, steps.length);
-    const gearLabel = (GEARS.find(g => g.id === gear) || {}).label || "";
-    const moves = steps.filter(s => s.item && (!s.round || s.round === 1)).length;   /* movements, not rounds × movements */
-
-    const fx = el(host, "div", "fx");
-    /* ---- sidebar ---- */
-    const side = el(fx, "div", "fxside");
-    const shead = el(side, "div", "fxshead");
-    const dayName = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][active] || "";
-    const focusTitle = (gear === "room" && week.room_session) ? week.room_session.title : String(d.title).split("·")[0].trim();
-    el(shead, "div", "fxtitle", `${dayName} — ${focusTitle}`);
-    el(shead, "div", "fxsub", `${gearLabel} · ${moves} movement${moves === 1 ? "" : "s"}`);
-    const prog = el(shead, "div", "fxprog");
-    const list = el(side, "div", "fxlist");
-    const foot = el(side, "div", "fxfoot");
-    const ws = Weight.summary();
-    if (ws) {
-      const l = el(foot, "div", "fxwt");
-      el(l, "div", "fxwk", "Weight");
-      const v = el(l, "div", "fxwv", `${ws.lbs.toFixed(1)} lb `);
-      if (ws.rate != null) el(v, "span", "fxwr", `${ws.rate > 0 ? "+" : "−"}${Math.abs(ws.rate).toFixed(1)}/wk`);
-      el(foot, "span", "fxwg", ws.eta ? `${ws.tgt} → ${ws.eta}` : `goal ${ws.tgt}`);
-    }
-    /* ---- main ---- */
-    const main = el(fx, "div", "fxmain");
-
-    /* the list groups by block; a superset shows one row per movement and the
-       round in its header, not R×N rows */
-    const rows = [];
-    let lastGroup = null;
-    steps.forEach((s, i) => {
-      const g = s.round ? `${s.label}|${s.round}` : s.label;
-      if (g !== lastGroup && s.block !== "end") {
-        el(list, "div", "fxgroup", s.round ? `${s.label} · Round ${s.round}/${s.rounds}` : s.label);
-        lastGroup = g;
-      }
-      const row = el(list, "div", "fxrow" + (s.block === "end" ? " fxrow-end" : ""));
-      el(row, "span", "fxdot");
-      el(row, "span", "fxrn", s.item ? shortName(s.item.n) : s.block === "end" ? "Feedback & mark complete" : s.title || s.label);
-      if (s.item) el(row, "span", "fxrx", /calibrate/i.test(rxOf(s)) ? "calibrate" : rxOf(s));
-      row.onclick = () => go(i);
-      rows.push(row);
-    });
-    const blocks = [...new Set(steps.map(s => s.label))];
-    const segs = blocks.map(b => { const seg = el(prog, "span", "fxseg"); seg.style.flex = String(Math.max(1, steps.filter(s => s.label === b).length)); return { b, seg }; });
-
-    function paintList() {
-      rows.forEach((r, i) => r.dataset.st = i < pos ? "done" : i === pos ? "on" : "");
-      const cur = steps[pos];
-      segs.forEach(({ b, seg }) => {
-        const idx = blocks.indexOf(b), curIdx = blocks.indexOf(cur.label);
-        seg.dataset.st = idx < curIdx ? "done" : idx === curIdx ? "on" : "";
+  function overview() {
+    dialog.heading.textContent = `${dayNames[active] || "Workout"} · full plan`;
+    dialogBody.textContent = "";
+    model.blocks.filter(b => b.kind !== "end").forEach(block => {
+      const section = el(dialogBody, "section", "uw-overblock");
+      button(section, `${block.label || block.title}${block.rounds > 1 ? ` · ${roundLabel(block.rounds)}` : ""}`, () => {
+        dialog.panel.close(); pickBlock(block);
+      }, "uw-link");
+      if (block.rest) el(section, "p", "uw-small", `${block.rest}s between rounds`);
+      block.items.forEach(item => {
+        const row = el(section, "div", "uw-overrow");
+        el(row, "span", null, item.n);
+        el(row, "span", "uw-small", target(item, resolveMovement(item.n) || {}));
       });
-      const on = rows[pos]; if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest" });
+      prose(section, block.prose);
+    });
+    if (model.source.note) {
+      const details = el(dialogBody, "details", "uw-notes"); details.open = true;
+      el(details, "summary", null, "Session notes & gym route"); prose(details, model.source.note);
     }
-    function go(i) {
-      stopAllClocks();
-      if (holdInterval) { clearInterval(holdInterval); holdInterval = null; holdBtn = null; }
-      pos = Math.max(0, Math.min(steps.length - 1, i));
-      saveFocusPos(d, pos);
-      paintList(); paintMain();
+    dialog.open();
+  }
+  function stepMark(step) { return state.marks[step.id]; }
+  function stats(block) {
+    const list = (block ? block.steps : model.steps).filter(s => s.block.kind !== "end");
+    return { total: list.length, done: list.filter(s => stepMark(s) === "done").length, skipped: list.filter(s => stepMark(s) === "skip").length };
+  }
+  function pickBlock(block) {
+    const step = block.steps.find(s => !stepMark(s)) || block.steps[0];
+    go(model.steps.indexOf(step));
+  }
+  function go(pos) {
+    stopAllClocks();
+    state.pos = Math.max(0, Math.min(model.steps.length - 1, pos));
+    saveUI(); paintWorkspace();
+  }
+  function draft(step) {
+    if (!state.drafts[step.canon]) {
+      const saved = logIndex.get(entryKey(DATE, week.days[active].key, step.canon)) || {};
+      const previous = lastLogged(step.canon) || {}, rx = prescription(step.item, step.meta);
+      const chosen = (key, fallback) => saved[key] !== undefined && saved[key] !== "" ? String(saved[key])
+        : previous[key] !== undefined && previous[key] !== "" ? String(previous[key]) : numFrom(fallback);
+      state.drafts[step.canon] = { weight: isBodyweight(rx.load) ? "0" : chosen("weight", rx.load), reps: chosen("reps", rx.reps) };
     }
-
-    function stepper(parent, label, value, step, onChange) {
-      const row = el(parent, "div", "fxstep");
-      el(row, "span", "fxk", label);
-      const ctl = el(row, "div", "fxctl");
-      const minus = el(ctl, "button", "fxpm", "−"); minus.type = "button";
-      const inp = el(ctl, "input", "fxnum"); inp.type = "text"; inp.inputMode = "decimal"; inp.value = value; inp.placeholder = "—";
-      const plus = el(ctl, "button", "fxpm", "+"); plus.type = "button";
-      const bump = k => { const v = parseFloat(inp.value); inp.value = String(Math.max(0, Math.round(((isNaN(v) ? 0 : v) + k * step) * 100) / 100)); onChange(inp.value); };
-      minus.onclick = () => bump(-1); plus.onclick = () => bump(1);
-      inp.oninput = () => onChange(inp.value.trim());
-      inp.onchange = () => onChange(inp.value.trim());
-      return inp;
+    return state.drafts[step.canon];
+  }
+  function stepper(parent, label, key, current) {
+    const field = el(parent, "label", "uw-field"); el(field, "span", null, label);
+    const control = el(field, "span", "uw-stepper");
+    const minus = button(control, "−", () => bump(-1)); minus.setAttribute("aria-label", `Decrease ${label}`);
+    const input = el(control, "input"); input.type = "text"; input.inputMode = key === "weight" ? "decimal" : "numeric";
+    input.value = current[key]; input.placeholder = "—"; input.setAttribute("aria-label", label);
+    const plus = button(control, "+", () => bump(1)); plus.setAttribute("aria-label", `Increase ${label}`);
+    const change = () => { current[key] = input.value.trim(); if (saveUI()) announce("Draft saved on this device"); };
+    const bump = delta => { input.value = String(Math.max(0, Math.round(((parseFloat(input.value) || 0) + delta) * 100) / 100)); change(); };
+    input.oninput = change;
+    return input;
+  }
+  function reference(parent, step) {
+    const ref = el(parent, "div", "uw-reference");
+    const path = Array.isArray(step.meta.form) ? step.meta.form[0] : step.meta.form;
+    if (path) {
+      const figure = el(ref, "figure");
+      const picture = button(figure, "Loading form reference…", null, "uw-form"); picture.disabled = true;
+      picture.setAttribute("aria-label", `Enlarge ${step.canon} form image`);
+      imageURL(path).then(url => {
+        if (!picture.isConnected) return;
+        picture.textContent = ""; const img = el(picture, "img"); img.src = url; img.alt = `${step.canon} form reference`;
+        picture.disabled = false; picture.onclick = () => openLightbox(url, step.canon);
+      }).catch(() => { if (picture.isConnected) picture.textContent = "Form image unavailable"; });
+      el(figure, "figcaption", "uw-small", "Form reference · tap to enlarge");
     }
-
-    function paintMain() {
-      main.textContent = "";
-      const s = steps[pos], next = steps[pos + 1];
-      const nextName = next ? (next.item ? shortName(next.item.n) : next.block === "end" ? "finish" : next.label) : null;
-      const top = el(main, "div", "fxtop");
-      el(top, "span", "fxblk", s.label);
-      if (s.round) el(top, "span", "fxpos", `Round ${s.round} of ${s.rounds} · movement ${s.pos} of ${s.of}`);
-      if (s.rest) el(top, "span", "fxrest", `rest after · ${s.rest}s`);
-
-      if (s.block === "end") {
-        const box = el(main, "div", "fxend");
-        el(box, "div", "fxname", "Session done");
-        el(box, "div", "fxeq", "How did it go?");
-        yogaRow(box, d.key); feedbackBox(box, d.key); sessionBar(box, d.key);
-        return;
-      }
-      const body = el(main, "div", "fxbody");
-      const left = el(body, "div", "fxleft");
-      const right = el(body, "div", "fxright");
-      let onDone = null;
-      if (s.block === "jm" || s.block === "engine") {
-        el(left, "div", "fxname", s.title || s.label);
-        const box = el(left, "div", "fxprose");
-        if (s.prose) box.textContent = s.prose;
-        else (s.items || []).forEach((it, i) => { const r = el(box, "div", "jmitem"); el(r, "span", "jmn", String(i + 1).padStart(2, "0")); el(r, "span", null, it); });
-      } else {
-        el(left, "div", "fxname", s.canon);
-        const eq = [s.meta.equipment, (String(s.item.n).match(/\((.*?)\)/) || [])[1]].filter(Boolean).join(" · ");
-        if (eq) el(left, "div", "fxeq", eq);
-        const fig = el(left, "div", "fxfig");
-        const imgPath = Array.isArray(s.meta.form) ? s.meta.form[0] : s.meta.form;
-        if (imgPath) {
-          const img = el(fig, "img"); img.alt = `${s.canon} form`;
-          imageURL(imgPath).then(u => { img.src = u; img.onclick = () => openLightbox(u, s.canon); })
-            .catch(() => { fig.textContent = ""; el(fig, "div", "mcph", "form pic"); });
-        } else el(fig, "div", "mcph", "form pic");
-
-        const saved = logIndex.get(entryKey(DATE, d.key, s.canon)) || {};
-        const last = lastLogged(s.canon);
-        const tgt = el(right, "div", "fxcard");
-        el(tgt, "span", "fxk", "Target");
-        const rx = rxOf(s);
-        el(tgt, "span", "fxtgt" + (/calibrate/i.test(rx) ? " warn" : ""), rx || "—");
-        if (last) el(tgt, "span", "fxlast", `last session ${last.weight || "—"}${last.reps ? ` × ${last.reps}` : ""}${last.time ? ` · ${last.time}` : ""}`);
-
-        if (s.mode === "full") {
-          const load = s.item.load_override ?? s.meta.load ?? s.item.l ?? "", reps = s.item.r || s.meta.reps || "";
-          const card = el(right, "div", "fxcard");
-          const cur = { weight: (saved.weight != null && saved.weight !== "") ? saved.weight : (last && last.weight ? last.weight : numFrom(load)),
-                        reps:   (saved.reps   != null && saved.reps   !== "") ? saved.reps   : (last && last.reps   ? last.reps   : numFrom(reps)) };
-          const push = () => queueSave(d.key, s.canon, { weight: String(cur.weight).trim(), reps: String(cur.reps).trim() });
-          /* ponytail: 1 kg / 1 rep steps; the number is typeable for odd pins */
-          stepper(card, "Weight kg", cur.weight, 1, v => { cur.weight = v; push(); });
-          stepper(card, "Reps", cur.reps, 1, v => { cur.reps = v; push(); });
-          onDone = push;   /* Done means "I did these numbers" — log them even if untouched */
-        } else if (s.mode === "hold") {
-          const sec = parseSeconds(s.item.r) ?? parseSeconds(s.meta.reps);
-          const card = el(right, "div", "fxcard");
-          if (sec) {
-            const btn = el(card, "button", "hold fxhold", saved.time ? `✓ ${saved.time}` : `▶ ${sec}s`);
-            btn._idle = btn.textContent; if (saved.time) btn.classList.add("fin");
-            btn.onclick = () => startHold(d.key, s.canon, sec, btn);
-          } else el(card, "span", "trendlab", "timed hold — no duration parsed");
-        }
-        if (Array.isArray(s.meta.cues) && s.meta.cues.length) {
-          const how = el(right, "div", "fxcard");
-          el(how, "span", "fxk", "How to");
-          const ul = el(how, "ul", "mccues");
-          s.meta.cues.forEach((q, i) => { const li = el(ul, "li", "mccue fxcue"); el(li, "span", "mccuen", String(i + 1).padStart(2, "0")); el(li, "span", null, q); });
-        }
-      }
-      const done = el(right, "button", "fxdone", nextName ? `Done — next: ${nextName}` : "Done");
-      done.type = "button";
-      let timer = null;
-      const handle = { stop() { if (timer) { timer.cancel(); timer = null; } releaseClock(handle); done.classList.remove("run"); } };
-      done.onclick = () => {
-        if (timer) { handle.stop(); go(pos + 1); return; }        /* press again to skip the rest */
-        if (s.mode === "check") queueSave(d.key, s.canon, { done: true });
-        if (onDone) onDone();
-        if (s.key && s.pos === s.of) roundState.set(s.key, s.round); /* keep the Plan set bar honest */
-        if (!s.rest) { go(pos + 1); return; }
-        claimClock(handle); done.classList.add("run");
-        timer = countdown(s.rest, r => { done.textContent = `Resting ${fmt(r)} — tap to skip`; }, () => { restOver(); handle.stop(); go(pos + 1); });
+    if (step.meta.cues?.length) {
+      const list = el(ref, "ol", "uw-cues");
+      step.meta.cues.forEach(cue => el(list, "li", null, cue));
+    }
+    if (!ref.childNodes.length) { ref.remove(); return false; }
+    return true;
+  }
+  function finish(parent) {
+    const day = week.days[active], key = sessionKey(DATE, day.key), counts = stats();
+    el(parent, "h2", "uw-title", sessions[key] ? "Session complete" : "How did it go?");
+    el(parent, "p", "uw-small", `${counts.done} steps logged · ${counts.skipped} skipped · ${counts.total - counts.done - counts.skipped} unlogged`);
+    const yoga = el(parent, "label", "uw-check");
+    const tick = el(yoga, "input"); tick.type = "checkbox";
+    tick.checked = !!logIndex.get(entryKey(DATE, day.key, "Yoga"))?.done;
+    el(yoga, "span", null, "Yoga / mobility");
+    tick.onchange = () => { try { queueSave(day.key, "Yoga", { done: tick.checked }); } catch (_) { tick.checked = !tick.checked; } };
+    const label = el(parent, "label", "uw-field"); el(label, "span", null, "Session feedback");
+    const feedback = el(label, "textarea"); feedback.value = notes[key] || "";
+    feedback.placeholder = "What felt light, heavy, or uncomfortable?";
+    feedback.oninput = () => { writeNote(key, feedback.value).catch(() => announce("Feedback could not be saved. Keep this page open.")); };
+    feedback.onblur = () => flushSaves();
+    button(parent, sessions[key] ? "Undo session completion" : "Mark session complete", () => {
+      const on = !sessions[key];
+      try { enqueue(`session:${key}`, { kind: "session", path: SESSIONS_PATH, key, value: on }); }
+      catch (_) { return; }
+      if (on) sessions[key] = true; else delete sessions[key];
+      paintWorkspace(); flushSaves();
+    }, sessions[key] ? "" : "uw-primary");
+    if (sessions[key]) el(parent, "p", "uw-small", `Completed · ${formatDate(DATE)}`);
+    el(parent, "p", "uw-small", "You can finish early. Skipped and unlogged movements keep their status.");
+    button(parent, "Return to session", () => { const index = model.steps.findIndex(s => s.block.kind !== "end" && stepMark(s) !== "done"); go(index < 0 ? 0 : index); });
+  }
+  function paintMovement(parent, step) {
+    const day = week.days[active], block = step.block, rx = step.item ? prescription(step.item, step.meta) : null;
+    el(parent, "h2", "uw-title", step.canon || block.title);
+    const instructions = step.item && (String(step.item.n).match(/\((.*?)\)/) || [])[1];
+    if (step.item) el(parent, "p", "uw-small", [step.meta.equipment, block.location, instructions].filter(Boolean).join(" · "));
+    const layout = el(parent, "div", "uw-detail");
+    if (!step.item || !reference(layout, step)) layout.classList.add("uw-no-reference");
+    const panel = el(layout, "section", "uw-log"); panel.setAttribute("aria-label", `Log ${step.canon || block.title}`);
+    if (step.item) {
+      const prescriptionBox = el(panel, "div"); el(prescriptionBox, "div", "uw-meta", "Plan prescription");
+      el(prescriptionBox, "div", "uw-target", target(step.item, step.meta) || "Easy pace");
+      const previous = lastLogged(step.canon);
+      el(prescriptionBox, "p", "uw-last", previous ? `Last logged ${formatDate(previous.date)} · ${[
+        previous.weight ? `${previous.weight} kg` : "", previous.reps ? `${previous.reps} reps` : "", previous.time || ""
+      ].filter(Boolean).join(" · ") || "Completed"}` : "No previous log");
+    } else prose(panel, block.prose);
+    const current = step.mode === "full" ? draft(step) : null;
+    if (current) {
+      const fields = el(panel, "div", "uw-fields");
+      if (!isBodyweight(rx.load)) stepper(fields, "Weight · kg", "weight", current);
+      stepper(fields, "Reps", "reps", current);
+    }
+    const duration = rx ? seconds(rx.reps) : 0, sides = rx && /\/side|each side/i.test(rx.reps) ? 2 : 1;
+    let holdButton, holdLabel;
+    const paintHold = () => {
+      const held = state.holds[step.id] || 0;
+      if (holdLabel) holdLabel.textContent = sides > 1 ? `${held} of ${sides} sides timed` : held ? "Timer complete" : step.mode === "hold" ? "Hold timer" : "Movement timer";
+      if (holdButton) holdButton.textContent = held >= sides ? "Repeat timer" : `Start ${fmt(duration)}${sides > 1 ? ` · side ${held + 1}` : " timer"}`;
+    };
+    if (duration) {
+      holdLabel = el(panel, "p", "uw-small");
+      holdButton = button(panel, "", () => {
+        if ((state.holds[step.id] || 0) >= sides) state.holds[step.id] = 0;
+        startTimer("hold", duration, () => {
+          state.holds[step.id] = Math.min(sides, (state.holds[step.id] || 0) + 1); saveUI(); paintHold();
+          if (step.mode === "hold") {
+            try { queueSave(day.key, step.canon, { time: `${duration}s` }); } catch (_) { return; }
+          }
+          announce("Timer complete");
+        });
+      }); paintHold();
+    }
+    const timerHost = el(panel, "div");
+    const error = el(panel, "div", "uw-error"); error.setAttribute("role", "alert");
+    const done = button(panel, stepMark(step) === "done" ? "Save & continue" : step.rest ? `Log & rest ${step.rest}s`
+      : step.mode === "full" ? "Log & next movement" : step.mode === "hold" ? "Log hold & continue" : "Done · continue", () => commit(false), "uw-primary");
+    const skip = button(panel, "Skip movement", () => { state.marks[step.id] = "skip"; go(state.pos + 1); }, "uw-quiet");
+    if (block.kind === "ss") el(panel, "p", "uw-small uw-note", "Complete both movements before resting.");
+    if (block.kind === "finisher" && block.rounds > 1) el(panel, "p", "uw-small uw-note", "Finish the block before the between-rounds rest.");
+    const stateLabel = el(panel, "p", "uw-small", stepMark(step) === "done" ? "This step is logged." : stepMark(step) === "skip" ? "Skipped earlier · you can log it now." : "");
+    function startTimer(kind, secondsToRun, completed) {
+      stopAllClocks(); error.textContent = ""; timerHost.textContent = "";
+      const box = el(timerHost, "div", "uw-timer"), info = el(box, "div");
+      el(info, "div", "uw-meta", kind === "rest" ? "Rest" : "Timer");
+      const clock = el(info, "div", "uw-clock"); clock.setAttribute("role", "timer");
+      let interval;
+      const stop = () => {
+        clearInterval(interval); timerHost.textContent = ""; done.disabled = false; skip.disabled = false;
+        if (holdButton) holdButton.disabled = false;
+        if (activeClock === stop) activeClock = null;
       };
-      const skip = el(right, "button", "fxskip", "Skip movement"); skip.type = "button";
-      skip.onclick = () => go(pos + 1);
-      if (next && next.item) {
-        const up = el(right, "div", "fxnext");
-        el(up, "span", "fxk", "Up next");
-        el(up, "span", "fxnn", nextName);
-        el(up, "span", "fxrx", rxOf(next));
+      button(box, kind === "rest" ? "Skip rest" : "Cancel timer", () => { stop(); if (kind === "rest") go(state.pos + 1); });
+      activeClock = stop; done.disabled = true; skip.disabled = true; if (holdButton) holdButton.disabled = true;
+      const deadline = Date.now() + secondsToRun * 1000;
+      const tick = () => {
+        if (!root.isConnected) { stop(); return; }
+        const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000)); clock.textContent = fmt(remaining);
+        if (!remaining) { stop(); finishClock(); completed(); }
+      };
+      interval = setInterval(tick, 250); tick();
+    }
+    function commit(manualHold) {
+      error.textContent = "";
+      if (current && (!/^\d+(\.\d+)?$/.test(current.weight) || !/^\d+$/.test(current.reps) || Number(current.reps) <= 0)) {
+        error.textContent = "Enter a weight and a positive whole number of reps."; return;
       }
+      if (step.mode === "hold" && duration && !manualHold && (state.holds[step.id] || 0) < sides) {
+        el(error, "span", null, `${sides > 1 ? "Time both sides" : "Run the timer"} before logging, or `);
+        button(error, "Log prescribed hold manually", () => commit(true), "uw-quiet"); return;
+      }
+      try {
+        if (step.item && step.mode !== "none") queueSave(day.key, step.canon, {
+          done: true, ...(current || {}), ...(step.mode === "hold" && duration ? { time: `${duration}s` } : {})
+        });
+      } catch (_) { error.textContent = "Could not save on this device. Keep this page open and try again."; return; }
+      state.marks[step.id] = "done"; saveUI(); paintOutline(); stateLabel.textContent = "This step is logged.";
+      announce(step.mode === "none" ? "Step completed" : "Logged · sync queued");
+      if (step.rest) startTimer("rest", step.rest, () => go(state.pos + 1)); else go(state.pos + 1);
     }
-    paintList(); paintMain();
   }
-
-  const render = () => view === "focus" ? renderFocus() : renderDay();
-
-  async function renderDay() {
-    /* the host is about to be emptied — a clock still ticking on a node that no
-       longer exists would beep at you from nowhere */
-    stopAllClocks();
-    if (holdInterval) { clearInterval(holdInterval); holdInterval = null; holdBtn = null; }
-    if (saveTimer) { clearTimeout(saveTimer); await flushSaves(); }
-    tabEls.forEach((t, i) => t.dataset.on = i === active ? "1" : "0");
-    host.textContent = "";
-
-    const d = week.days[active];
-    const isStrength = d.type === "strength";
-    const rounds = roundsForGear(gear);
-    const showRounds = Math.max(1, rounds);
-
-    if (gear === "blue-r" && isStrength && d.just_move) {
-      const head = el(host, "div", "dhead");
-      el(head, "div", "dtitle", d.just_move.title);
-      el(head, "div", "dtag", "strength day · just move — swap the lift for a walk + mobility");
-      const s = sectionHead(host, "Just move", "");
-      const jm = el(s, "div", "jm");
-      (d.just_move.items || []).forEach((it, i) => {
-        const row = el(jm, "div", "jmitem");
-        el(row, "span", "jmn", String(i + 1).padStart(2, "0"));
-        el(row, "span", null, it);
-      });
-      const fin = el(host, "div", "fin");
-      feedbackBox(fin, d.key);
-      sessionBar(fin, d.key);
-      return;
-    }
-
-    const room = (gear === "room" && week.room_session) ? week.room_session : null;
-    const src = room || d;
-
-    const head = el(host, "div", "dhead");
-    el(head, "div", "dtitle", room ? room.title : d.title);
-
-    if (Array.isArray(src.warmup) && src.warmup.length) {
-      /* the warm-up is one pass, not rounds — the only rest is between
-         movements, and the section head has claimed 30s all along without
-         ever giving you a way to run it */
-      const s = sectionHead(host, "Warm-up", `${restSecFor("warmup")}s between`);
-      movementGrid(s, d.key, src.warmup, { section: "Warm-up", mode: defaultLogMode("warmup"), rest: restSecFor("warmup"), row: true });
-    }
-    if (src.engine) {
-      const s = sectionHead(host, "Engine", "");
-      el(s, "div", "prose", src.engine);
-    }
-    (src.ss || []).forEach((block, bi) => {
-      const r    = room ? (block.rounds ?? showRounds) : showRounds;
-      const rest = room ? (block.rest ?? 60) : restSecFor("ss", bi);
-      const s = sectionHead(host, shortName(block.label || `Superset ${bi + 1}`), `${roundLabel(r)}${rest ? ` · rest ${rest}s` : ""}`);
-      setBar(s, `${d.key}|${gear}|ss${bi}`, r, rest);
-      /* no per-card rest inside a superset: the paired exercise IS the rest.
-         Resting between the two halves turns the pair back into straight sets.
-         The only rest that belongs here is the set bar's, after a full round. */
-      movementGrid(s, d.key, block.ex, { section: block.label || "Superset", mode: defaultLogMode("ss"), cols: 2 });
+  let outline, progressLabel, progressFill, skippedLabel, mobilePicker, main;
+  function paintOutline() {
+    outline.textContent = ""; mobilePicker.textContent = "";
+    const current = model.steps[state.pos];
+    model.blocks.forEach((block, index) => {
+      const count = stats(block), selected = current.block === block;
+      const nav = button(outline, "", () => pickBlock(block), "uw-nav"); nav.setAttribute("aria-current", String(selected));
+      el(nav, "span", "uw-navno", count.total && count.done === count.total ? "✓" : String(index + 1).padStart(2, "0"));
+      const copy = el(nav, "span", "uw-navcopy"); el(copy, "span", "uw-navtitle", block.title);
+      el(copy, "span", "uw-small", block.kind === "end" ? "Yoga · feedback" : `${block.items.length || 1} ${block.items.length ? block.items.length === 1 ? "movement" : "movements" : "activity"} · ${block.rounds > 1 ? roundLabel(block.rounds) : "one pass"}${count.done || count.skipped ? ` · ${count.done}/${count.total} logged` : ""}`);
+      const option = el(mobilePicker, "option", null, `${block.title}${block.rounds > 1 ? ` · ${roundLabel(block.rounds)}` : ""}`); option.value = String(index); option.selected = selected;
     });
-    if (Array.isArray(src.finisher) && src.finisher.length) {
-      const label = d.type === "engine" && !room ? "Core" : "Finisher";
-      const perItem = (src.finisher || []).some(f => f.rounds);
-      const s = sectionHead(host, label, perItem ? "" : `${roundLabel(showRounds)} · rest ${restSecFor("finisher")}s`);
-      /* per-item rounds means each movement carries its own count, so a single
-         block-wide round counter would be lying */
-      if (!perItem) setBar(s, `${d.key}|${gear}|fin`, showRounds, restSecFor("finisher"));
-      movementGrid(s, d.key, src.finisher, { section: label, mode: defaultLogMode("finisher"), rest: restSecFor("finisher"), cols: 3 });
-    }
-    if (Array.isArray(src.cool) && src.cool.length) {
-      const s = sectionHead(host, "Cool-down", "30s each side");
-      movementGrid(s, d.key, src.cool, { section: "Cool-down", mode: defaultLogMode("cool"), cols: 3 });
-    }
-    yogaRow(host, d.key);
-    const fin = el(host, "div", "fin");
-    feedbackBox(fin, d.key);
-    sessionBar(fin, d.key);
+    const count = stats();
+    progressLabel.textContent = `${count.done} of ${count.total} steps logged`;
+    progressFill.style.width = `${count.total ? 100 * count.done / count.total : 0}%`;
+    skippedLabel.textContent = count.skipped ? `${count.skipped} skipped · revisit any time` : "Jump to any block";
   }
-
+  function paintWorkspace() {
+    paintOutline(); main.textContent = "";
+    const step = model.steps[state.pos], block = step.block;
+    const top = el(main, "div", "uw-breadcrumb"); el(top, "div", "uw-meta uw-gold", block.title);
+    if (block.rounds > 1) {
+      const rounds = el(top, "div", "uw-rounds"); el(rounds, "span", "uw-small", "Round");
+      for (let round = 1; round <= block.rounds; round++) {
+        const b = button(rounds, String(round), () => go(model.steps.findIndex(s => s.block === block && s.round === round && s.index === step.index)));
+        b.setAttribute("aria-label", `Round ${round} of ${block.rounds}`); b.setAttribute("aria-pressed", String(step.round === round));
+      }
+    } else if (block.kind !== "end") el(top, "span", "uw-meta", "One pass");
+    if (block.kind === "end") { finish(main); return; }
+    if (block.kind === "ss") {
+      const pair = el(main, "div", "uw-pair"); pair.setAttribute("aria-label", "Paired movements");
+      block.items.forEach((item, i) => {
+        const b = button(pair, `${String.fromCharCode(65 + i)} · ${cleanName(item.n)}`, () => go(model.steps.findIndex(s => s.block === block && s.round === step.round && s.index === i)));
+        b.setAttribute("aria-pressed", String(step.index === i));
+      });
+    }
+    paintMovement(main, step);
+    const next = model.steps[state.pos + 1], footer = el(main, "div", "uw-next"), text = el(footer, "div");
+    el(text, "div", "uw-meta", "Up next"); el(text, "div", null, next.canon || next.block.title);
+    if (next.block.rounds > 1) el(text, "p", "uw-small", `Round ${next.round} of ${next.block.rounds}`);
+    const previous = button(footer, "Previous", () => go(state.pos - 1), "uw-quiet"); previous.disabled = state.pos === 0;
+  }
+  function render() {
+    stopAllClocks();
+    const day = week.days[active]; model = WorkoutSession.build(day, gear, week.room_session, resolveMovement);
+    state = ui[stateKey()] ||= { pos: 0, marks: {}, drafts: {}, holds: {} };
+    state.pos = Math.max(0, Math.min(model.steps.length - 1, Number(state.pos) || 0));
+    state.marks ||= {}; state.drafts ||= {}; state.holds ||= {};
+    tabEls.forEach((tab, index) => { tab.setAttribute("aria-pressed", String(index === active)); });
+    titleEl.textContent = model.title;
+    kickerEl.textContent = `Workout · ${dayNames[active] || day.tab} · ${formatDate(DATE)}`;
+    const repeated = model.blocks.filter(block => block.rounds > 1);
+    const roundSummary = repeated.length ? `${repeated[0].rounds} rounds ${model.blocks.some(block => block.kind === "ss") ? "per pair" : "of core"}` : "";
+    subtitleEl.textContent = gear === "blue-r" && day.type === "strength" && day.just_move ? "Easy walk + mobility"
+      : [model.movements ? `${model.movements} movements` : day.tag, gear === "room" ? "mat only" : roundSummary].filter(Boolean).join(" · ");
+    gearSelect.value = gear;
+    host.textContent = "";
+    const mobile = el(host, "label", "uw-mobile uw-field"); el(mobile, "span", null, "Session outline");
+    mobilePicker = el(mobile, "select"); mobilePicker.setAttribute("aria-label", "Jump to workout block");
+    mobilePicker.onchange = () => pickBlock(model.blocks[Number(mobilePicker.value)]);
+    const layout = el(host, "div", "uw-layout"), sidebar = el(layout, "aside", "uw-sidebar");
+    el(sidebar, "div", "uw-meta uw-sidehead", "Session outline");
+    outline = el(sidebar, "nav", "uw-outline"); outline.setAttribute("aria-label", "Workout blocks");
+    const progress = el(sidebar, "div", "uw-progress"); progressLabel = el(progress, "p", "uw-small");
+    progressFill = el(el(progress, "div", "uw-track"), "div", "uw-fill"); skippedLabel = el(progress, "p", "uw-small");
+    main = el(layout, "section", "uw-main"); main.setAttribute("aria-label", "Active workout movement");
+    paintWorkspace();
+  }
   async function mount(container) {
     if (mounted || !container) return;
-    container.textContent = "";
-    root = el(container, "div", "wkt");
-    const loading = el(root, "div", "sub", "Loading week from repo…");
+    container.textContent = ""; root = el(container, "div", "wkt");
+    const loading = el(root, "p", "uw-small", "Loading week from repo…");
+    try { DATE = todayISO(); await loadAll(); } catch (e) { loading.textContent = `Could not load workout: ${e.message}`; return; }
+    mounted = true; root.textContent = "";
+    try { ui = JSON.parse(localStorage.getItem(uiKey()) || "{}"); if (!ui || typeof ui !== "object") ui = {}; } catch (_) { ui = {}; }
+    // Preserve the old Focus position without treating earlier steps as completed.
     try {
-      DATE = todayISO();
-      await loadAll();
-    } catch (e) {
-      loading.textContent = `⚠ ${e.message}`;
-      return;
-    }
-    mounted = true;
-    root.textContent = "";
-
-    gear = (() => {
-      try {
-        const s = JSON.parse(localStorage.getItem("wkt-gear") || "null");
-        if (s && s.date === DATE && GEARS.some(g => g.id === s.id)) return s.id;
-      } catch (_) {}
-      return "red";
-    })();
-    active = (() => {
-      const mondayFirst = (new Date().getDay() + 6) % 7;
-      return (mondayFirst >= 0 && mondayFirst < week.days.length) ? mondayFirst : 0;
-    })();
-
-    view = (() => { try { return localStorage.getItem(VIEW_KEY) === "focus" ? "focus" : "plan"; } catch (_) { return "plan"; } })();
-    const seg = el(root, "div", "wt-seg fxview");
-    const segBtns = [["plan", "Plan"], ["focus", "Focus"]].map(([id, lab]) => {
-      const b = el(seg, "button", "wt-segbtn", lab); b.type = "button";
-      b.onclick = () => { view = id; try { localStorage.setItem(VIEW_KEY, id); } catch (_) {} paintView(); render(); };
-      return { b, id };
-    });
-    const paintView = () => { root.dataset.view = view; segBtns.forEach(s => s.b.dataset.on = s.id === view ? "1" : "0"); };
-    paintView();
-
-    const hdr = el(root, "div", "hdr");
-    const hleft = el(hdr, "div");
-    el(hleft, "div", "kick", `Training · ${fmtHeaderDate(new Date())}`);
-    el(hleft, "div", "brand", "Workout");
-    const chips = el(hdr, "div", "hchips");
-
-    if (week.review_due && DATE > week.review_due) {
-      el(root, "div", "stale",
-        `⚠ Plan week ended ${week.review_due} — run /workout-review to roll the week. Cards below still show the old week's plan.`);
-    }
-
-    /* bodyweight: one strip (Claude Design "Workout Focus") — reading, sparkline,
-       7-day, trend, goal. "Edit today" opens the full card the Diet view mounts,
-       so logging and the goal editor are still the one component (D-2/D-4). */
-    const strip = el(root, "div", "wstrip");
-    const wmount = el(root, "div", "wmount"); wmount.hidden = true;
-    const paintStrip = () => {
-      strip.textContent = "";
-      const w = Weight.summary();
-      el(strip, "span", "wslab", "Weight");
-      if (!w) { el(strip, "span", "wsk", "no readings yet"); return; }
-      const n = el(strip, "span", "wsn", w.lbs.toFixed(1) + " "); el(n, "span", "wsu", "lb");
-      if (w.pts.length > 1) {
-        const NS = "http://www.w3.org/2000/svg", W = 120, H = 28, P = 3;
-        const svg = document.createElementNS(NS, "svg");
-        svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("aria-hidden", "true");
-        const lo = Math.min(...w.pts), hi = Math.max(...w.pts), rng = (hi - lo) || 1;
-        const pl = document.createElementNS(NS, "polyline");
-        pl.setAttribute("points", w.pts.map((v, i) => `${(P + i * (W - 2 * P) / (w.pts.length - 1)).toFixed(1)},${(H - P - (v - lo) / rng * (H - 2 * P)).toFixed(1)}`).join(" "));
-        pl.setAttribute("fill", "none"); pl.setAttribute("stroke", "var(--gold-hi)"); pl.setAttribute("stroke-width", "2"); pl.setAttribute("stroke-linecap", "round"); pl.setAttribute("stroke-linejoin", "round");
-        svg.appendChild(pl); strip.appendChild(svg);
+      const previous = JSON.parse(localStorage.getItem("wkt-focus") || "null");
+      if (previous?.date === DATE && typeof previous.key === "string" && !ui[previous.key]) {
+        ui[previous.key] = { pos: previous.pos, marks: {}, drafts: {}, holds: {} };
       }
-      const kv = (k, v, cls) => { const e = el(strip, "span", "wsk", k + " "); el(e, "b", cls || null, v); };
-      if (w.avg != null) kv("7-day", w.avg.toFixed(1));
-      if (w.rate != null) kv("trend", `${w.rate > 0 ? "+" : "−"}${Math.abs(w.rate).toFixed(1)} lb/wk`, w.rate < -0.05 ? "ok" : w.rate > 0.05 ? "bad" : "");
-      kv(`goal ${w.tgt} →`, w.eta || "no date yet", "gold");
-      const b = el(strip, "button", "wsedit", w.today != null ? `Edit today · ${w.today.toFixed(1)}` : "Log today"); b.type = "button";
-      b.onclick = () => { wmount.hidden = !wmount.hidden; b.dataset.on = wmount.hidden ? "0" : "1"; };
-      b.dataset.on = wmount.hidden ? "0" : "1";
+    } catch (_) {}
+    try { const saved = JSON.parse(localStorage.getItem("wkt-gear") || "null"); if (saved?.date === DATE && GEARS.some(g => g.id === saved.id)) gear = saved.id; } catch (_) {}
+    active = Math.min((new Date().getDay() + 6) % 7, week.days.length - 1);
+    const dayNav = el(root, "nav", "uw-days"); dayNav.setAttribute("aria-label", "Workout days");
+    tabEls = week.days.map((day, index) => button(dayNav, String(day.tab).split(" ")[0], () => { active = index; render(); }, "uw-day"));
+    const header = el(root, "header", "uw-header"), heading = el(header, "div");
+    kickerEl = el(heading, "div", "uw-meta"); titleEl = el(heading, "h1", "uw-title uw-gold"); subtitleEl = el(heading, "p", "uw-small");
+    const tools = el(header, "div", "uw-tools"), label = el(tools, "label", "uw-field"); el(label, "span", null, "Session");
+    gearSelect = el(label, "select"); gearSelect.setAttribute("aria-label", "Session mode");
+    GEARS.forEach(g => { const option = el(gearSelect, "option", null, g.label + ({ red: " · 3 rounds", blue: " · 2 rounds", room: " · mat only" }[g.id] || "")); option.value = g.id; });
+    gearSelect.onchange = () => {
+      gear = gearSelect.value;
+      try { localStorage.setItem("wkt-gear", JSON.stringify({ date: DATE, id: gear })); } catch (_) {}
+      render();
     };
-    Weight.mount(wmount, { chartH: 220 }).then(paintStrip);   /* the log loads async — paint once it is in */
-    Weight.onChange(paintStrip);
-
-    const dayBox = el(chips, "div", "gears days");
-    tabEls = [];
-    week.days.forEach((d, i) => {
-      const t = el(dayBox, "button", "gear", String(d.tab).split(" ")[0]);
-      t.dataset.on = i === active ? "1" : "0";
-      t.onclick = () => { active = i; render(); };
-      tabEls.push(t);
+    let weightMounted = false;
+    button(tools, "Bodyweight", async () => {
+      weightDialog.open();
+      if (!weightMounted) { weightMounted = true; await Weight.mount(weightDialog.body, { chartH: 220 }); }
     });
-
-    const gearBox = el(chips, "div", "gears");
-    gearEls = {};
-    for (const g of GEARS) {
-      const b = el(gearBox, "button", "gear", g.label);
-      b.dataset.on = g.id === gear ? "1" : "0";
-      b.onclick = () => {
-        gear = g.id;
-        try { localStorage.setItem("wkt-gear", JSON.stringify({ date: DATE, id: gear })); } catch (_) {}
-        for (const id in gearEls) gearEls[id].dataset.on = id === gear ? "1" : "0";
-        render();
-      };
-      gearEls[g.id] = b;
-    }
-
+    const plan = el(root, "div", "uw-planline");
+    const dates = el(plan, "div", "uw-plan-dates");
+    el(dates, "span", null, `Plan: ${formatDate(week.week_start)}`);
+    if (week.review_due) el(dates, "span", null, `Review due ${formatDate(week.review_due)}`);
+    if (week.review_due && DATE > week.review_due) { plan.classList.add("uw-stale"); el(dates, "span", null, "Plan needs review"); }
+    button(plan, "Full plan & notes", overview, "uw-quiet");
     host = el(root, "div");
+    statusEl = el(root, "p", "uw-status uw-small"); statusEl.setAttribute("role", "status"); statusEl.setAttribute("aria-live", "polite");
+    dialog = makeDialog("Workout detail"); dialogBody = dialog.body; weightDialog = makeDialog("Bodyweight", true);
     render();
   }
 
   return { mount };
 })();
+
 
 /* ====================================================================
    FOOD — port of orgs/health/Food.md (Renovatio prep-batch composer).
