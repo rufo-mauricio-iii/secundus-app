@@ -2,7 +2,7 @@
 const WorkoutReview = (() => {
   const BASE = "orgs/health/data/workout/reviews/";
   const views = new Map();
-  let current = null, decision = null, loading = null, queued = false, error = "";
+  let current = null, decision = null, loading = null, queued = false, error = "", delivery = "pwa";
   const pending = p => ["awaiting_approval", "needs_clarification", "revision_requested", "stale"].includes(p?.status);
   const actionable = p => p?.status === "awaiting_approval" && Array.isArray(p.changes) && p.changes.length > 0 && !p.question;
   function element(parent, tag, cls, content) {
@@ -24,8 +24,10 @@ const WorkoutReview = (() => {
     if (loading) return loading;
     loading = (async () => {
       try {
-        const [review, saved] = await Promise.all([readFile(BASE + "current.json"), readFile(BASE + "decision.json")]);
+        const [review, saved, policy] = await Promise.all([readFile(BASE + "current.json"), readFile(BASE + "decision.json"),
+          readFile("orgs/health/data/workout/review-policy.json")]);
         current = review?.data || null; decision = saved?.data || null; error = "";
+        delivery = policy?.data?.proposal_delivery || current?.delivery || "pwa";
         queued = !!(pending(current) && decision?.proposal_id === current.id && decision?.approval_digest === current.approval_digest
           && decision.decided_at !== current.decision_request_at && !current.last_error);
       } catch (_) { error = "Could not load workout reviews. Try again."; }
@@ -34,7 +36,7 @@ const WorkoutReview = (() => {
     return loading;
   }
   async function submit(action, note = "") {
-    if (!current || queued) return;
+    if (!current || queued || delivery === "chat" || current.delivery === "chat") return;
     const shown = current;
     if (action === "revise" && !note.trim()) { error = "Add your clarification or requested revision first."; repaint(); return; }
     queued = true; error = ""; repaint();
@@ -57,6 +59,11 @@ const WorkoutReview = (() => {
   }
   function paint(root, options) {
     root.textContent = ""; root.className = "workout-review";
+    if (delivery === "chat" || current?.delivery === "chat") {
+      options.onPendingChange?.(0);
+      root.hidden = true;
+      return;
+    }
     options.onPendingChange?.(pending(current) ? 1 : 0);
     if (!current && !error) { root.hidden = true; return; }
     root.hidden = false;
