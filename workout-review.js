@@ -43,7 +43,7 @@ const WorkoutReview = (() => {
       if (latest?.id !== shown.id || latest?.approval_digest !== shown.approval_digest || !pending(latest)) {
         throw new Error("The review changed. Refresh and review the current proposal before deciding.");
       }
-      const value = { version: 1, proposal_id: shown.id, approval_digest: shown.approval_digest,
+      const value = { version: 1, review_ui_version: 2, proposal_id: shown.id, approval_digest: shown.approval_digest,
         action, note: note.trim(), decided_at: new Date().toISOString() };
       await saveJSON(BASE + "decision.json", () => value, `workout: ${action} proposal ${shown.id} [site]`);
       decision = value; repaint();
@@ -82,8 +82,21 @@ const WorkoutReview = (() => {
     for (const change of current.changes || []) {
       const row = element(root, "section", "wr-change");
       element(row, "h4", "", change.exercise);
-      element(row, "p", "wr-prescription", `${change.field === "load" ? "Weight" : "Reps"}: ${change.old} → ${change.new}`);
+      const labels = { load: "Weight", reps: "Reps", substitution: "Exercise", schedule: "Weekly schedule" };
+      const show = (parent, label, oldValue, newValue) => {
+        element(parent, "p", "wr-meta", label);
+        const before = element(parent, "p", "wr-prescription", `Before: ${oldValue || "—"}`);
+        const after = element(parent, "p", "wr-prescription", `After: ${newValue || "—"}`);
+        before.style.whiteSpace = after.style.whiteSpace = "pre-line";
+      };
+      show(row, labels[change.field] || change.field, change.old, change.new);
       element(row, "p", "wr-reason", change.reason);
+      if (change.details?.length) {
+        const details = element(row, "details", "wr-revision");
+        details.open = true;
+        element(details, "summary", "", "Session instructions also change");
+        for (const detail of change.details) show(details, detail.label, detail.old, detail.new);
+      }
       for (const evidence of change.evidence || []) {
         const source = String(evidence.source || "");
         const key = source.split("#")[1] || (source.match(/workout-log\/(\d{4}-\d{2}-\d{2})__/) || [])[1] || "";

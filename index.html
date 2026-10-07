@@ -2348,7 +2348,7 @@ const Workout = (() => {
   const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   let model, state, ui = {}, activeClock = null, dialog, dialogBody, weightDialog;
   let titleEl, subtitleEl, kickerEl, statusEl, gearSelect;
-  const uiKey = () => `wkt-workspace:${store.repo}:${DATE}:${week.week_start}`;
+  const uiKey = () => `wkt-workspace:${store.repo}:${DATE}:${week.week_start}${week.revision ? ":" + week.revision : ""}`;
   const stateKey = () => `${week.days[active].key}|${gear}`;
   function saveUI() {
     try { localStorage.setItem(uiKey(), JSON.stringify(ui)); return true; }
@@ -2654,14 +2654,14 @@ const Workout = (() => {
     // Preserve the old Focus position without treating earlier steps as completed.
     try {
       const previous = JSON.parse(localStorage.getItem("wkt-focus") || "null");
-      if (previous?.date === DATE && typeof previous.key === "string" && !ui[previous.key]) {
+      if (!week.revision && previous?.date === DATE && typeof previous.key === "string" && !ui[previous.key]) {
         ui[previous.key] = { pos: previous.pos, marks: {}, drafts: {}, holds: {} };
       }
     } catch (_) {}
     try { const saved = JSON.parse(localStorage.getItem("wkt-gear") || "null"); if (saved?.date === DATE && GEARS.some(g => g.id === saved.id)) gear = saved.id; } catch (_) {}
     active = Math.min((new Date().getDay() + 6) % 7, week.days.length - 1);
     const dayNav = el(root, "nav", "uw-days"); dayNav.setAttribute("aria-label", "Workout days");
-    tabEls = week.days.map((day, index) => button(dayNav, String(day.tab).split(" ")[0], () => { active = index; render(); }, "uw-day"));
+    tabEls = week.days.map((day, index) => button(dayNav, dayNames[index].slice(0, 3), () => { active = index; render(); }, "uw-day"));
     const header = el(root, "header", "uw-header"), heading = el(header, "div");
     kickerEl = el(heading, "div", "uw-meta"); titleEl = el(heading, "h1", "uw-title uw-gold"); subtitleEl = el(heading, "p", "uw-small");
     const tools = el(header, "div", "uw-tools"), label = el(tools, "label", "uw-field"); el(label, "span", null, "Session");
