@@ -2341,7 +2341,10 @@ const Workout = (() => {
   }
 
   /* One workspace: the outline, movement editor, and overview share a model. */
-  const { formatDate, prescription, target, isBodyweight, seconds } = WorkoutSession;
+  const { formatDate, isBodyweight, seconds } = WorkoutSession;
+  const calibratedWeight = item => WorkoutSession.latestWeight(log, item.n, DATE);
+  const prescription = (item, meta) => WorkoutSession.prescription(item, meta, calibratedWeight(item));
+  const target = (item, meta) => WorkoutSession.target(item, meta, calibratedWeight(item));
   const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   let model, state, ui = {}, activeClock = null, dialog, dialogBody, weightDialog;
   let titleEl, subtitleEl, kickerEl, statusEl, gearSelect;
@@ -2493,6 +2496,7 @@ const Workout = (() => {
     if (step.item) {
       const prescriptionBox = el(panel, "div"); el(prescriptionBox, "div", "uw-meta", "Plan prescription");
       el(prescriptionBox, "div", "uw-target", target(step.item, step.meta) || "Easy pace");
+      if (rx.calibrated_from) el(prescriptionBox, "p", "uw-small", `Starting weight saved ${formatDate(rx.calibrated_from)}`);
       const previous = lastLogged(step.canon);
       el(prescriptionBox, "p", "uw-last", previous ? `Last logged ${formatDate(previous.date)} · ${[
         previous.weight ? `${previous.weight} kg` : "", previous.reps ? `${previous.reps} reps` : "", previous.time || ""

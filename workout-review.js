@@ -85,7 +85,8 @@ const WorkoutReview = (() => {
       element(row, "p", "wr-prescription", `${change.field === "load" ? "Weight" : "Reps"}: ${change.old} → ${change.new}`);
       element(row, "p", "wr-reason", change.reason);
       for (const evidence of change.evidence || []) {
-        const key = String(evidence.source || "").split("#")[1] || "";
+        const source = String(evidence.source || "");
+        const key = source.split("#")[1] || (source.match(/workout-log\/(\d{4}-\d{2}-\d{2})__/) || [])[1] || "";
         const label = /^\d{4}-\d{2}-\d{2}/.test(key) ? dateLabel(key.slice(0, 10)) : "Your saved feedback";
         element(row, "p", "wr-evidence", `${label}: “${evidence.quote}”`);
       }

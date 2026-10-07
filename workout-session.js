@@ -7,13 +7,23 @@ const WorkoutSession = (() => {
     const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(parts[2]) - 1];
     return month ? `${month}-${parts[3]}-${parts[1]}` : String(value);
   };
-  const prescription = (item, meta = {}) => ({
-    load: item.load_override ?? item.l ?? meta.load ?? "",
-    reps: item.r || meta.reps || "",
-  });
+  const validWeight = value => /^\d+(?:\.\d+)?$/.test(String(value ?? "").trim()) && Number(value) > 0;
+  function latestWeight(records, name, asOf) {
+    const canon = cleanName(name).toLowerCase();
+    return records.filter(row => cleanName(row.exercise).toLowerCase() === canon && row.date <= asOf && validWeight(row.weight))
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  }
+  function prescription(item, meta = {}, logged = null) {
+    const load = item.load_override ?? item.l ?? meta.load ?? "";
+    // A recorded starting weight resolves a calibration placeholder. It does
+    // not override an explicit prescription or imply automatic progression.
+    const calibrated = /calibrat/i.test(load) && validWeight(logged?.weight);
+    return { load: calibrated ? `${String(logged.weight).trim()} kg` : load,
+      reps: item.r || meta.reps || "", ...(calibrated ? { calibrated_from: logged.date } : {}) };
+  }
   const isBodyweight = load => /^body\s?weight$/i.test(String(load).trim());
-  function target(item, meta) {
-    const { load, reps } = prescription(item, meta);
+  function target(item, meta, logged) {
+    const { load, reps } = prescription(item, meta, logged);
     return [isBodyweight(load) ? "" : /calibrate/i.test(load) ? "Choose starting load" : load, reps].filter(Boolean).join(" × ");
   }
   function seconds(value) {
@@ -65,6 +75,6 @@ const WorkoutSession = (() => {
     return { blocks, steps, source, title: justMove ? "Just move" : source.title || day.title,
       movements: blocks.reduce((n, block) => n + block.items.length, 0) };
   }
-  return { cleanName, formatDate, prescription, isBodyweight, target, seconds, build };
+  return { cleanName, formatDate, prescription, isBodyweight, target, seconds, build, latestWeight };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = WorkoutSession;
