@@ -2620,7 +2620,24 @@ const Workout = (() => {
   }
   function render() {
     stopAllClocks();
-    const day = week.days[active]; model = WorkoutSession.build(day, gear, week.room_session, resolveMovement);
+    const day = week.days[active], recovery = WorkoutSession.recoveryFor(week, day.key, DATE);
+    gearSelect.disabled = Boolean(recovery);
+    gearSelect.parentElement.style.display = recovery ? "none" : "";
+    if (recovery) {
+      model = { blocks: [], steps: [], source: recovery, title: recovery.title, movements: 0 };
+      tabEls.forEach((tab, index) => tab.setAttribute("aria-pressed", String(index === active)));
+      titleEl.textContent = recovery.title;
+      kickerEl.textContent = `${recovery.preview ? "Upcoming" : "Workout"} · ${dayNames[active]} · ${formatDate(recovery.date)}`;
+      subtitleEl.textContent = recovery.tag;
+      host.textContent = "";
+      const card = el(host, "section", "uw-main"); card.setAttribute("aria-label", "Dated recovery session");
+      el(card, "h2", "uw-gold", "Rest / optional gentle movement");
+      prose(card, recovery.note);
+      el(card, "p", "uw-small", `Applies ${formatDate(recovery.date)} only. Your regular routine returns afterward; there is no automatic makeup session.`);
+      el(card, "p", "uw-small", "No strength sets are scheduled for this recovery day. Share how you feel in the workout chat.");
+      return;
+    }
+    model = WorkoutSession.build(day, gear, week.room_session, resolveMovement);
     state = ui[stateKey()] ||= { pos: 0, marks: {}, drafts: {}, holds: {} };
     state.pos = Math.max(0, Math.min(model.steps.length - 1, Number(state.pos) || 0));
     state.marks ||= {}; state.drafts ||= {}; state.holds ||= {};

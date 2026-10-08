@@ -8,6 +8,16 @@ const WorkoutSession = (() => {
     return month ? `${month}-${parts[3]}-${parts[1]}` : String(value);
   };
   const validWeight = value => /^\d+(?:\.\d+)?$/.test(String(value ?? "").trim()) && Number(value) > 0;
+  function recoveryFor(plan, dayKey, asOf) {
+    const dayIndex = plan.days.findIndex(day => day.key === dayKey);
+    if (dayIndex < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return null;
+    const today = new Date(asOf + "T12:00:00");
+    const next = new Date(today);
+    next.setDate(today.getDate() + (dayIndex - (today.getDay() + 6) % 7 + 7) % 7);
+    const nextDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    const override = plan.recovery_overrides?.[nextDate];
+    return override?.day === dayKey ? { ...override, date: nextDate, preview: nextDate !== asOf } : null;
+  }
   function latestWeight(records, name, asOf) {
     const canon = cleanName(name).toLowerCase();
     return records.filter(row => cleanName(row.exercise).toLowerCase() === canon && row.date <= asOf && validWeight(row.weight))
@@ -75,6 +85,6 @@ const WorkoutSession = (() => {
     return { blocks, steps, source, title: justMove ? "Just move" : source.title || day.title,
       movements: blocks.reduce((n, block) => n + block.items.length, 0) };
   }
-  return { cleanName, formatDate, prescription, isBodyweight, target, seconds, build, latestWeight };
+  return { cleanName, formatDate, prescription, isBodyweight, target, seconds, build, latestWeight, recoveryFor };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = WorkoutSession;
