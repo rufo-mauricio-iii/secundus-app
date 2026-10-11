@@ -2177,13 +2177,57 @@ function createWorkoutOutbox(storage, key, save, saved, failed) {
   };
 }
 // WORKOUT_OUTBOX_END
+// WORKOUT_HISTORY_START
+async function retryWorkoutRead(read, wait = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+  try { return await read(); }
+  catch (error) {
+    const status = Number(error.message?.match(/GitHub (\d{3})/)?.[1]);
+    if (!(status >= 500 || error.name === "TypeError" || /timed out|network|failed to fetch|load failed/i.test(error.message))) throw error;
+    await wait(500);
+    return read();
+  }
+}
+async function loadWorkoutHistory({ readFile, listDir, storage, repo, directory, wait }) {
+  const key = `wkt-history:${repo}`;
+  let cached = {};
+  try { cached = JSON.parse(storage.getItem(key) || "{}"); } catch (_) {}
+  if (!cached || typeof cached !== "object" || Array.isArray(cached)) cached = {};
+  let files;
+  try { files = (await retryWorkoutRead(() => listDir(directory), wait)).filter(f => f.name.endsWith(".json")); }
+  catch (error) { return { entries: [], warning: error.message }; }
+  const valid = data => data && typeof data.date === "string" && typeof data.day === "string" && typeof data.exercise === "string";
+  const next = {}, entries = new Array(files.length);
+  let cursor = 0, stopped = false;
+  // Bound cold-start requests; reuse only entries whose current Git SHA matches.
+  await Promise.all(Array.from({ length: Math.min(4, files.length) }, async () => {
+    while (cursor < files.length && !stopped) {
+      const index = cursor++, file = files[index];
+      try {
+        const saved = cached[file.path];
+        const entry = saved?.sha === file.sha && valid(saved.data) ? saved
+          : await retryWorkoutRead(() => readFile(file.path), wait);
+        if (!valid(entry?.data)) throw new Error("Invalid workout history entry");
+        entries[index] = entry.data;
+        next[file.path] = { sha: entry.sha, data: entry.data };
+      } catch (error) {
+        // Do not keep hitting GitHub after it rejects access or rate limits us.
+        if (/GitHub (401|403|429)\b/.test(error.message)) stopped = true;
+      }
+    }
+  }));
+  try { storage.setItem(key, JSON.stringify(next)); } catch (_) {} // Cache is optional; the outbox is separate.
+  const loaded = entries.filter(Boolean), missing = files.length - loaded.length;
+  return { entries: loaded, warning: missing ? `${missing} past workout ${missing === 1 ? "entry is" : "entries are"} unavailable.` : "" };
+}
+// WORKOUT_HISTORY_END
 const Workout = (() => {
   const WEEK_PATH     = "orgs/health/data/workout/workout-week.json";
   const LOG_DIR       = "orgs/health/data/workout/workout-log";
   const SESSIONS_PATH = "orgs/health/data/workout/workout-sessions.json";
   const NOTES_PATH    = "orgs/health/data/workout/workout-review-notes.json";
 
-  let mounted = false, week = null, log = [], sessions = {}, notes = {};
+  let mounted = false, mounting = false, week = null, log = [], sessions = {}, notes = {};
+  let historyWarning = "";
   let root, host, tabEls = [];
 
   /* ---- helpers straight from the widget ---- */
@@ -2304,26 +2348,33 @@ const Workout = (() => {
   }
 
   /* ---- data load ---- */
+  async function loadHistory() {
+    const before = new Map(log.map(e => [entryKey(e.date, e.day, e.exercise), e]));
+    const result = await loadWorkoutHistory({ readFile, listDir, storage: localStorage, repo: store.repo, directory: LOG_DIR });
+    const merged = new Map(result.entries.map(e => [entryKey(e.date, e.day, e.exercise), e]));
+    // A log saved while history was retrying is newer than that read's snapshot.
+    for (const e of log) {
+      const key = entryKey(e.date, e.day, e.exercise);
+      if (before.get(key) !== e) merged.set(key, e);
+    }
+    log = [...merged.values()];
+    historyWarning = result.warning;
+    applyPending();
+  }
   async function loadAll() {
-    const w = await readFile(WEEK_PATH);
+    const w = await retryWorkoutRead(() => readFile(WEEK_PATH));
     if (!w || !w.data || !Array.isArray(w.data.days)) throw new Error(`Could not load ${WEEK_PATH}`);
     week = w.data; WW = week.working_weights || {};
-    log = [];
-    /* Read canonical entries for all dates; the desktop cache may be stale. */
-    const files = await listDir(LOG_DIR);
-    for (const f of files.filter(f => f.name.endsWith(".json"))) {
-        const e = await readFile(f.path);
-        if (!e) continue;
-        shaMap.set(f.path, e.sha);
-        if (e.data && e.data.date && e.data.day && e.data.exercise) {
-          const k = entryKey(e.data.date, e.data.day, e.data.exercise);
-          log = log.filter(x => entryKey(x.date, x.day, x.exercise) !== k).concat([e.data]);
-        }
-    }
-    const s = await readFile(SESSIONS_PATH);
+    const [s, n] = await Promise.all([
+      retryWorkoutRead(() => readFile(SESSIONS_PATH)),
+      retryWorkoutRead(() => readFile(NOTES_PATH)),
+    ]);
     sessions = (s && s.data && typeof s.data === "object") ? s.data : {};
-    const n = await readFile(NOTES_PATH);
     notes = (n && n.data && typeof n.data === "object") ? n.data : {};
+    await loadHistory();
+    if (ensureOutbox().pending.size) saveTimer = setTimeout(flushSaves, 600);
+  }
+  function applyPending() {
     for (const value of ensureOutbox().pending.values()) {
       if (value.kind === "movement") {
         const k = entryKey(value.date, value.day, value.exercise);
@@ -2337,7 +2388,6 @@ const Workout = (() => {
     for (const e of log) {
       if (e && e.date === DATE && e.day && e.exercise) logIndex.set(entryKey(e.date, e.day, e.exercise), e);
     }
-    if (ensureOutbox().pending.size) saveTimer = setTimeout(flushSaves, 600);
   }
 
   /* One workspace: the outline, movement editor, and overview share a model. */
@@ -2690,10 +2740,17 @@ const Workout = (() => {
     paintWorkspace();
   }
   async function mount(container) {
-    if (mounted || !container) return;
+    if (mounted || mounting || !container) return;
+    mounting = true;
     container.textContent = ""; root = el(container, "div", "wkt");
     const loading = el(root, "p", "uw-small", "Loading week from repo…");
-    try { DATE = todayISO(); await loadAll(); } catch (e) { loading.textContent = `Could not load workout: ${e.message}`; return; }
+    try { DATE = todayISO(); await loadAll(); }
+    catch (e) {
+      loading.textContent = `Could not load workout: ${e.message}`;
+      loading.setAttribute("role", "alert");
+      button(root, "Retry loading workout", () => mount(container));
+      return;
+    } finally { mounting = false; }
     mounted = true; root.textContent = "";
     try { ui = JSON.parse(localStorage.getItem(uiKey()) || "{}"); if (!ui || typeof ui !== "object") ui = {}; } catch (_) { ui = {}; }
     // Preserve the old Focus position without treating earlier steps as completed.
@@ -2725,6 +2782,19 @@ const Workout = (() => {
     planEl = el(root, "div", "uw-planline");
     planDatesEl = el(planEl, "div", "uw-plan-dates");
     button(planEl, "Full plan & notes", overview, "uw-quiet");
+    const historyNotice = el(root, "div", "uw-small"); historyNotice.setAttribute("role", "status");
+    function paintHistoryNotice() {
+      historyNotice.textContent = "";
+      if (!historyWarning) return;
+      el(historyNotice, "p", null, `Workout history is incomplete. ${historyWarning} Previous weights may be missing; your workout can still be logged.`);
+      const retry = button(historyNotice, "Retry workout history", async () => {
+        retry.disabled = true; retry.textContent = "Retrying…";
+        try { await loadHistory(); render(); }
+        catch (error) { historyWarning = error.message; }
+        finally { paintHistoryNotice(); }
+      });
+    }
+    paintHistoryNotice();
     WorkoutReview.mount(el(root, "div"));
     host = el(root, "div");
     statusEl = el(root, "p", "uw-status uw-small"); statusEl.setAttribute("role", "status"); statusEl.setAttribute("aria-live", "polite");
