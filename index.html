@@ -2211,7 +2211,7 @@ const Workout = (() => {
     } catch (e) {}
   }
   const numFrom = s => /^\s*~?\s*\d/.test(String(s || "")) ? (String(s).match(/\d+(?:\.\d+)?/) || [""])[0] : "";
-  const roundLabel = n => `${n} round${n === 1 ? "" : "s"}`;
+  const roundLabel = n => `${n} ${model?.source?.fixed_rounds ? "set" : "round"}${n === 1 ? "" : "s"}`;
 
   /* These were labelled Base / Easy / Room / Lazy under the heading "Intensity",
      but they are not four intensities — Room is a place and Lazy is a mood.
@@ -2347,7 +2347,7 @@ const Workout = (() => {
   const target = (item, meta) => WorkoutSession.target(item, meta, calibratedWeight(item));
   const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   let model, state, ui = {}, activeClock = null, dialog, dialogBody, weightDialog;
-  let titleEl, subtitleEl, kickerEl, statusEl, gearSelect;
+  let titleEl, subtitleEl, kickerEl, statusEl, gearSelect, planEl, planDatesEl;
   const uiKey = () => `wkt-workspace:${store.repo}:${DATE}:${week.week_start}${week.revision ? ":" + week.revision : ""}`;
   const stateKey = () => `${week.days[active].key}|${WorkoutSession.sessionFor(week, week.days[active].key, DATE)?.date || gear}`;
   function saveUI() {
@@ -2534,7 +2534,7 @@ const Workout = (() => {
     const done = button(panel, stepMark(step) === "done" ? "Save & continue" : step.rest ? `Log & rest ${step.rest}s`
       : step.mode === "full" ? "Log & next movement" : step.mode === "hold" ? "Log hold & continue" : "Done · continue", () => commit(false), "uw-primary");
     const skip = button(panel, "Skip movement", () => { state.marks[step.id] = "skip"; go(state.pos + 1); }, "uw-quiet");
-    if (block.kind === "ss") el(panel, "p", "uw-small uw-note", "Complete both movements before resting.");
+    if (block.kind === "ss" && block.items.length > 1) el(panel, "p", "uw-small uw-note", "Complete both movements before resting.");
     if (block.kind === "finisher" && block.rounds > 1) el(panel, "p", "uw-small uw-note", "Finish the block before the between-rounds rest.");
     const stateLabel = el(panel, "p", "uw-small", stepMark(step) === "done" ? "This step is logged." : stepMark(step) === "skip" ? "Skipped earlier · you can log it now." : "");
     function startTimer(kind, secondsToRun, completed) {
@@ -2599,10 +2599,10 @@ const Workout = (() => {
     const step = model.steps[state.pos], block = step.block;
     const top = el(main, "div", "uw-breadcrumb"); el(top, "div", "uw-meta uw-gold", block.title);
     if (block.rounds > 1) {
-      const rounds = el(top, "div", "uw-rounds"); el(rounds, "span", "uw-small", "Round");
+      const rounds = el(top, "div", "uw-rounds"); el(rounds, "span", "uw-small", model.source.fixed_rounds ? "Set" : "Round");
       for (let round = 1; round <= block.rounds; round++) {
         const b = button(rounds, String(round), () => go(model.steps.findIndex(s => s.block === block && s.round === round && s.index === step.index)));
-        b.setAttribute("aria-label", `Round ${round} of ${block.rounds}`); b.setAttribute("aria-pressed", String(step.round === round));
+        b.setAttribute("aria-label", `${model.source.fixed_rounds ? "Set" : "Round"} ${round} of ${block.rounds}`); b.setAttribute("aria-pressed", String(step.round === round));
       }
     } else if (block.kind !== "end") el(top, "span", "uw-meta", "One pass");
     if (block.kind === "end") { finish(main); return; }
@@ -2616,13 +2616,22 @@ const Workout = (() => {
     paintMovement(main, step);
     const next = model.steps[state.pos + 1], footer = el(main, "div", "uw-next"), text = el(footer, "div");
     el(text, "div", "uw-meta", "Up next"); el(text, "div", null, next.canon || next.block.title);
-    if (next.block.rounds > 1) el(text, "p", "uw-small", `Round ${next.round} of ${next.block.rounds}`);
+    if (next.block.rounds > 1) el(text, "p", "uw-small", `${model.source.fixed_rounds ? "Set" : "Round"} ${next.round} of ${next.block.rounds}`);
     const previous = button(footer, "Previous", () => go(state.pos - 1), "uw-quiet"); previous.disabled = state.pos === 0;
   }
   function render() {
     stopAllClocks();
     const scheduled = week.days[active], recovery = WorkoutSession.recoveryFor(week, scheduled.key, DATE);
     const dated = WorkoutSession.sessionFor(week, scheduled.key, DATE), day = dated || scheduled;
+    planDatesEl.textContent = "";
+    const selectedDate = dated?.date || recovery?.date;
+    planEl.classList.toggle("uw-stale", Boolean(!selectedDate && week.review_due && DATE > week.review_due));
+    el(planDatesEl, "span", null, selectedDate ? `Approved session: ${formatDate(selectedDate)}` : `Plan: ${formatDate(week.week_start)}`);
+    if (selectedDate) el(planDatesEl, "span", null, "One day only");
+    else {
+      if (week.review_due) el(planDatesEl, "span", null, `Review due ${formatDate(week.review_due)}`);
+      if (week.review_due && DATE > week.review_due) el(planDatesEl, "span", null, "Plan needs review");
+    }
     gearSelect.disabled = Boolean(recovery || dated);
     gearSelect.parentElement.style.display = recovery || dated ? "none" : "";
     if (recovery) {
@@ -2713,12 +2722,9 @@ const Workout = (() => {
       weightDialog.open();
       if (!weightMounted) { weightMounted = true; await Weight.mount(weightDialog.body, { chartH: 220 }); }
     });
-    const plan = el(root, "div", "uw-planline");
-    const dates = el(plan, "div", "uw-plan-dates");
-    el(dates, "span", null, `Plan: ${formatDate(week.week_start)}`);
-    if (week.review_due) el(dates, "span", null, `Review due ${formatDate(week.review_due)}`);
-    if (week.review_due && DATE > week.review_due) { plan.classList.add("uw-stale"); el(dates, "span", null, "Plan needs review"); }
-    button(plan, "Full plan & notes", overview, "uw-quiet");
+    planEl = el(root, "div", "uw-planline");
+    planDatesEl = el(planEl, "div", "uw-plan-dates");
+    button(planEl, "Full plan & notes", overview, "uw-quiet");
     WorkoutReview.mount(el(root, "div"));
     host = el(root, "div");
     statusEl = el(root, "p", "uw-status uw-small"); statusEl.setAttribute("role", "status"); statusEl.setAttribute("aria-live", "polite");
