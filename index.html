@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="home.css">
 <link rel="stylesheet" href="health.css">
 <script src="workout-session.js"></script>
+<script src="workout-data.js"></script>
 <script src="workout-review.js"></script>
 <script src="recipe-workflow.js?v=20260926-cards"></script>
 </head>
@@ -2177,57 +2178,10 @@ function createWorkoutOutbox(storage, key, save, saved, failed) {
   };
 }
 // WORKOUT_OUTBOX_END
-// WORKOUT_HISTORY_START
-async function retryWorkoutRead(read, wait = ms => new Promise(resolve => setTimeout(resolve, ms))) {
-  try { return await read(); }
-  catch (error) {
-    const status = Number(error.message?.match(/GitHub (\d{3})/)?.[1]);
-    if (!(status >= 500 || error.name === "TypeError" || /timed out|network|failed to fetch|load failed/i.test(error.message))) throw error;
-    await wait(500);
-    return read();
-  }
-}
-async function loadWorkoutHistory({ readFile, listDir, storage, repo, directory, wait }) {
-  const key = `wkt-history:${repo}`;
-  let cached = {};
-  try { cached = JSON.parse(storage.getItem(key) || "{}"); } catch (_) {}
-  if (!cached || typeof cached !== "object" || Array.isArray(cached)) cached = {};
-  let files;
-  try { files = (await retryWorkoutRead(() => listDir(directory), wait)).filter(f => f.name.endsWith(".json")); }
-  catch (error) { return { entries: [], warning: error.message }; }
-  const valid = data => data && typeof data.date === "string" && typeof data.day === "string" && typeof data.exercise === "string";
-  const next = {}, entries = new Array(files.length);
-  let cursor = 0, stopped = false;
-  // Bound cold-start requests; reuse only entries whose current Git SHA matches.
-  await Promise.all(Array.from({ length: Math.min(4, files.length) }, async () => {
-    while (cursor < files.length && !stopped) {
-      const index = cursor++, file = files[index];
-      try {
-        const saved = cached[file.path];
-        const entry = saved?.sha === file.sha && valid(saved.data) ? saved
-          : await retryWorkoutRead(() => readFile(file.path), wait);
-        if (!valid(entry?.data)) throw new Error("Invalid workout history entry");
-        entries[index] = entry.data;
-        next[file.path] = { sha: entry.sha, data: entry.data };
-      } catch (error) {
-        // Do not keep hitting GitHub after it rejects access or rate limits us.
-        if (/GitHub (401|403|429)\b/.test(error.message)) stopped = true;
-      }
-    }
-  }));
-  try { storage.setItem(key, JSON.stringify(next)); } catch (_) {} // Cache is optional; the outbox is separate.
-  const loaded = entries.filter(Boolean), missing = files.length - loaded.length;
-  return { entries: loaded, warning: missing ? `${missing} past workout ${missing === 1 ? "entry is" : "entries are"} unavailable.` : "" };
-}
-// WORKOUT_HISTORY_END
 const Workout = (() => {
-  const WEEK_PATH     = "orgs/health/data/workout/workout-week.json";
-  const LOG_DIR       = "orgs/health/data/workout/workout-log";
-  const SESSIONS_PATH = "orgs/health/data/workout/workout-sessions.json";
-  const NOTES_PATH    = "orgs/health/data/workout/workout-review-notes.json";
+  const { logs: LOG_DIR, sessions: SESSIONS_PATH, notes: NOTES_PATH } = WorkoutData.paths;
 
-  let mounted = false, mounting = false, week = null, log = [], sessions = {}, notes = {};
-  let historyWarning = "";
+  let mounted = false, mounting = false, week = null, data = null;
   let root, host, tabEls = [];
 
   /* ---- helpers straight from the widget ---- */
@@ -2238,7 +2192,7 @@ const Workout = (() => {
     return s || "ex";
   }
   const entryPath  = (date, dayKey, exName) => `${LOG_DIR}/${date}__${dayKey}__${slug(exName)}.json`;
-  const entryKey   = (date, dayKey, ex) => `${date}|${dayKey}|${ex}`;
+  const entryKey   = WorkoutData.entryKey;
   const sessionKey = (date, dayKey) => `${date}__${dayKey}`;
   function todayISO() {
     const d = new Date(); const p = n => String(n).padStart(2, "0");
@@ -2265,11 +2219,11 @@ const Workout = (() => {
     { id: "room", label: "No kit" }, { id: "blue-r", label: "Just move" },
   ];
   /* ---- state ---- */
-  let DATE = todayISO(), WW = {}, logIndex = new Map();
+  let DATE = todayISO(), WW = {};
   let gear = "red", active = 0;
 
   function historyFor(canon) {
-    return log.filter(e => e.exercise === canon && e.date < DATE && (e.weight || e.reps || e.time || e.done))
+    return [...data.records.values()].filter(e => e.exercise === canon && e.date < DATE && (e.weight || e.reps || e.time || e.done))
               .sort((a, b) => a.date.localeCompare(b.date));
   }
   const lastLogged = canon => { const h = historyFor(canon); return h.length ? h[h.length - 1] : null; };
@@ -2301,8 +2255,7 @@ const Workout = (() => {
       if (value.kind === "movement") {
         const k = entryKey(value.date, value.day, value.exercise);
         const current = { ...result, ...(outbox.pending.get(k)?.patch || {}) };
-        logIndex.set(k, current);
-        log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k).concat([current]);
+        data.records.set(k, current);
       }
       syncDotFlash(true);
     }, (_value, e) => {
@@ -2326,9 +2279,8 @@ const Workout = (() => {
     enqueue(k, { kind: "movement", path: entryPath(DATE, dayKey, exercise),
       date: DATE, day: dayKey, exercise,
       patch: { ...(existing?.patch || {}), ...patch, gear } });
-    const current = { ...logIndex.get(k), ...patch, gear, date: DATE, day: dayKey, exercise };
-    logIndex.set(k, current);
-    log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k).concat([current]);
+    const current = { ...data.records.get(k), ...patch, gear, date: DATE, day: dayKey, exercise };
+    data.records.set(k, current);
   }
   async function flushSaves() {
     if (saveTimer) clearTimeout(saveTimer);
@@ -2340,7 +2292,7 @@ const Workout = (() => {
   /* free-form feedback per day, keyed like sessions: `${DATE}__${dayKey}` */
   async function writeNote(k, text) {
     enqueue(`feedback:${k}`, { kind: "feedback", path: NOTES_PATH, key: k, value: text });
-    notes[k] = text;
+    data.notes[k] = text;
   }
   function syncDotFlash(ok) {
     const dot = $("sync-dot");
@@ -2348,51 +2300,35 @@ const Workout = (() => {
   }
 
   /* ---- data load ---- */
-  async function loadHistory() {
-    const before = new Map(log.map(e => [entryKey(e.date, e.day, e.exercise), e]));
-    const result = await loadWorkoutHistory({ readFile, listDir, storage: localStorage, repo: store.repo, directory: LOG_DIR });
-    const merged = new Map(result.entries.map(e => [entryKey(e.date, e.day, e.exercise), e]));
-    // A log saved while history was retrying is newer than that read's snapshot.
-    for (const e of log) {
-      const key = entryKey(e.date, e.day, e.exercise);
-      if (before.get(key) !== e) merged.set(key, e);
-    }
-    log = [...merged.values()];
-    historyWarning = result.warning;
-    applyPending();
-  }
-  async function loadAll() {
-    const w = await retryWorkoutRead(() => readFile(WEEK_PATH));
-    if (!w || !w.data || !Array.isArray(w.data.days)) throw new Error(`Could not load ${WEEK_PATH}`);
-    week = w.data; WW = week.working_weights || {};
-    const [s, n] = await Promise.all([
-      retryWorkoutRead(() => readFile(SESSIONS_PATH)),
-      retryWorkoutRead(() => readFile(NOTES_PATH)),
-    ]);
-    sessions = (s && s.data && typeof s.data === "object") ? s.data : {};
-    notes = (n && n.data && typeof n.data === "object") ? n.data : {};
-    await loadHistory();
+  async function loadCore() {
+    data ||= WorkoutData.create({ readFile, listDir, storage: localStorage, repo: store.repo,
+      pending: () => ensureOutbox().pending.values() });
+    await data.loadCore();
+    week = data.week; WW = week.working_weights || {};
     if (ensureOutbox().pending.size) saveTimer = setTimeout(flushSaves, 600);
   }
-  function applyPending() {
-    for (const value of ensureOutbox().pending.values()) {
-      if (value.kind === "movement") {
-        const k = entryKey(value.date, value.day, value.exercise);
-        const previous = log.find(e => entryKey(e.date, e.day, e.exercise) === k) || {};
-        log = log.filter(e => entryKey(e.date, e.day, e.exercise) !== k).concat([
-          { ...previous, ...value.patch, date: value.date, day: value.day, exercise: value.exercise }]);
-      } else if (value.kind === "session") sessions[value.key] = value.value;
-      else if (value.kind === "feedback") notes[value.key] = value.value;
-    }
-    logIndex = new Map();
-    for (const e of log) {
-      if (e && e.date === DATE && e.day && e.exercise) logIndex.set(entryKey(e.date, e.day, e.exercise), e);
+  let historyNotice, refreshLoadedHistory = () => {};
+  async function refreshHistory() {
+    const request = data.loadHistory();
+    paintHistoryNotice();
+    try { await request; }
+    catch (error) { data.historyStatus = "partial"; data.historyWarning = error.message; }
+    paintHistoryNotice();
+    refreshLoadedHistory();
+  }
+  function paintHistoryNotice() {
+    historyNotice.textContent = "";
+    if (data.historyStatus === "loading") {
+      el(historyNotice, "p", null, "Loading previous workouts… You can start your session.");
+    } else if (data.historyWarning) {
+      el(historyNotice, "p", null, `Workout history is incomplete. ${data.historyWarning} Previous weights may be missing; your workout can still be logged.`);
+      button(historyNotice, "Retry workout history", refreshHistory);
     }
   }
 
   /* One workspace: the outline, movement editor, and overview share a model. */
   const { formatDate, isBodyweight, seconds } = WorkoutSession;
-  const calibratedWeight = item => WorkoutSession.latestWeight(log, item.n, DATE);
+  const calibratedWeight = item => WorkoutSession.latestWeight([...data.records.values()], item.n, DATE);
   const prescription = (item, meta) => WorkoutSession.prescription(item, meta, calibratedWeight(item));
   const target = (item, meta) => WorkoutSession.target(item, meta, calibratedWeight(item));
   const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -2468,24 +2404,25 @@ const Workout = (() => {
     state.pos = Math.max(0, Math.min(model.steps.length - 1, pos));
     saveUI(); paintWorkspace();
   }
+  function initialDraft(step) {
+    const saved = data.records.get(entryKey(DATE, week.days[active].key, step.canon)) || {};
+    const previous = model.source.fixed_rounds ? {} : lastLogged(step.canon) || {}, rx = prescription(step.item, step.meta);
+    const chosen = (key, fallback) => saved[key] !== undefined && saved[key] !== "" ? String(saved[key])
+      : previous[key] !== undefined && previous[key] !== "" ? String(previous[key]) : numFrom(fallback);
+    return { weight: isBodyweight(rx.load) ? "0" : chosen("weight", model.source.fixed_rounds ? "" : rx.load), reps: chosen("reps", rx.reps) };
+  }
   function draft(step) {
-    if (!state.drafts[step.canon]) {
-      const saved = logIndex.get(entryKey(DATE, week.days[active].key, step.canon)) || {};
-      const previous = model.source.fixed_rounds ? {} : lastLogged(step.canon) || {}, rx = prescription(step.item, step.meta);
-      const chosen = (key, fallback) => saved[key] !== undefined && saved[key] !== "" ? String(saved[key])
-        : previous[key] !== undefined && previous[key] !== "" ? String(previous[key]) : numFrom(fallback);
-      state.drafts[step.canon] = { weight: isBodyweight(rx.load) ? "0" : chosen("weight", model.source.fixed_rounds ? "" : rx.load), reps: chosen("reps", rx.reps) };
-    }
+    state.drafts[step.canon] ||= initialDraft(step);
     return state.drafts[step.canon];
   }
-  function stepper(parent, label, key, current) {
+  function stepper(parent, label, key, current, onEdit) {
     const field = el(parent, "label", "uw-field"); el(field, "span", null, label);
     const control = el(field, "span", "uw-stepper");
     const minus = button(control, "−", () => bump(-1)); minus.setAttribute("aria-label", `Decrease ${label}`);
     const input = el(control, "input"); input.type = "text"; input.inputMode = key === "weight" ? "decimal" : "numeric";
     input.value = current[key]; input.placeholder = "—"; input.setAttribute("aria-label", label);
     const plus = button(control, "+", () => bump(1)); plus.setAttribute("aria-label", `Increase ${label}`);
-    const change = () => { current[key] = input.value.trim(); if (saveUI()) announce("Draft saved on this device"); };
+    const change = () => { onEdit(); current[key] = input.value.trim(); if (saveUI()) announce("Draft saved on this device"); };
     const bump = delta => { input.value = String(Math.max(0, Math.round(((parseFloat(input.value) || 0) + delta) * 100) / 100)); change(); };
     input.oninput = change;
     return input;
@@ -2513,26 +2450,27 @@ const Workout = (() => {
   }
   function finish(parent) {
     const day = week.days[active], key = sessionKey(DATE, day.key), counts = stats();
-    el(parent, "h2", "uw-title", sessions[key] ? "Session complete" : "How did it go?");
+    el(parent, "h2", "uw-title", data.sessions[key] ? "Session complete" : "How did it go?");
     el(parent, "p", "uw-small", `${counts.done} steps logged · ${counts.skipped} skipped · ${counts.total - counts.done - counts.skipped} unlogged`);
     const yoga = el(parent, "label", "uw-check");
     const tick = el(yoga, "input"); tick.type = "checkbox";
-    tick.checked = !!logIndex.get(entryKey(DATE, day.key, "Yoga"))?.done;
+    refreshLoadedHistory = () => { tick.checked = !!data.records.get(entryKey(DATE, day.key, "Yoga"))?.done; };
+    refreshLoadedHistory();
     el(yoga, "span", null, "Yoga / mobility");
     tick.onchange = () => { try { queueSave(day.key, "Yoga", { done: tick.checked }); } catch (_) { tick.checked = !tick.checked; } };
     const label = el(parent, "label", "uw-field"); el(label, "span", null, "Session feedback");
-    const feedback = el(label, "textarea"); feedback.value = notes[key] || "";
+    const feedback = el(label, "textarea"); feedback.value = data.notes[key] || "";
     feedback.placeholder = "What felt light, heavy, or uncomfortable?";
     feedback.oninput = () => { writeNote(key, feedback.value).catch(() => announce("Feedback could not be saved. Keep this page open.")); };
     feedback.onblur = () => flushSaves();
-    button(parent, sessions[key] ? "Undo session completion" : "Mark session complete", () => {
-      const on = !sessions[key];
+    button(parent, data.sessions[key] ? "Undo session completion" : "Mark session complete", () => {
+      const on = !data.sessions[key];
       try { enqueue(`session:${key}`, { kind: "session", path: SESSIONS_PATH, key, value: on }); }
       catch (_) { return; }
-      if (on) sessions[key] = true; else delete sessions[key];
+      if (on) data.sessions[key] = true; else delete data.sessions[key];
       paintWorkspace(); flushSaves();
-    }, sessions[key] ? "" : "uw-primary");
-    if (sessions[key]) el(parent, "p", "uw-small", `Completed · ${formatDate(DATE)}`);
+    }, data.sessions[key] ? "" : "uw-primary");
+    if (data.sessions[key]) el(parent, "p", "uw-small", `Completed · ${formatDate(DATE)}`);
     el(parent, "p", "uw-small", "You can finish early. Skipped and unlogged movements keep their status.");
     button(parent, "Return to session", () => { const index = model.steps.findIndex(s => s.block.kind !== "end" && stepMark(s) !== "done"); go(index < 0 ? 0 : index); });
   }
@@ -2544,21 +2482,38 @@ const Workout = (() => {
     const layout = el(parent, "div", "uw-detail");
     if (!step.item || !reference(layout, step)) layout.classList.add("uw-no-reference");
     const panel = el(layout, "section", "uw-log"); panel.setAttribute("aria-label", `Log ${step.canon || block.title}`);
+    let paintPrescription = () => {};
     if (step.item) {
-      const prescriptionBox = el(panel, "div"); el(prescriptionBox, "div", "uw-meta", "Plan prescription");
-      el(prescriptionBox, "div", "uw-target", target(step.item, step.meta) || "Easy pace");
-      if (rx.calibrated_from) el(prescriptionBox, "p", "uw-small", `Starting weight saved ${formatDate(rx.calibrated_from)}`);
-      const previous = lastLogged(step.canon);
-      el(prescriptionBox, "p", "uw-last", previous ? `Last logged ${formatDate(previous.date)} · ${[
-        previous.weight ? `${previous.weight} kg` : "", previous.reps ? `${previous.reps} reps` : "", previous.time || ""
-      ].filter(Boolean).join(" · ") || "Completed"}` : "No previous log");
+      const prescriptionBox = el(panel, "div");
+      paintPrescription = () => {
+        prescriptionBox.textContent = "";
+        el(prescriptionBox, "div", "uw-meta", "Plan prescription");
+        el(prescriptionBox, "div", "uw-target", target(step.item, step.meta) || "Easy pace");
+        const loadedRx = prescription(step.item, step.meta);
+        if (loadedRx.calibrated_from) el(prescriptionBox, "p", "uw-small", `Starting weight saved ${formatDate(loadedRx.calibrated_from)}`);
+        const previous = lastLogged(step.canon);
+        el(prescriptionBox, "p", "uw-last", previous ? `Last logged ${formatDate(previous.date)} · ${[
+          previous.weight ? `${previous.weight} kg` : "", previous.reps ? `${previous.reps} reps` : "", previous.time || ""
+        ].filter(Boolean).join(" · ") || "Completed"}` : data.historyStatus === "ready" ? "No previous log" : "Previous workouts are not fully loaded");
+      };
+      paintPrescription();
     } else prose(panel, block.prose);
+    const newDraft = step.mode === "full" && !state.drafts[step.canon];
     const current = step.mode === "full" ? draft(step) : null;
+    const inputs = {};
+    let edited = false;
     if (current) {
       const fields = el(panel, "div", "uw-fields");
-      if (!isBodyweight(rx.load)) stepper(fields, "Weight · kg", "weight", current);
-      stepper(fields, "Reps", "reps", current);
+      if (!isBodyweight(rx.load)) inputs.weight = stepper(fields, "Weight · kg", "weight", current, () => { edited = true; });
+      inputs.reps = stepper(fields, "Reps", "reps", current, () => { edited = true; });
     }
+    refreshLoadedHistory = () => {
+      paintPrescription();
+      if (newDraft && !edited && !activeClock) {
+        Object.assign(current, initialDraft(step));
+        for (const [key, input] of Object.entries(inputs)) input.value = current[key];
+      }
+    };
     const duration = rx ? seconds(rx.reps) : 0, sides = rx && /\/side|each side/i.test(rx.reps) ? 2 : 1;
     let holdButton, holdLabel;
     const paintHold = () => {
@@ -2645,6 +2600,7 @@ const Workout = (() => {
     skippedLabel.textContent = count.skipped ? `${count.skipped} skipped · revisit any time` : "Jump to any block";
   }
   function paintWorkspace() {
+    refreshLoadedHistory = () => {};
     paintOutline(); main.textContent = "";
     const step = model.steps[state.pos], block = step.block;
     const top = el(main, "div", "uw-breadcrumb"); el(top, "div", "uw-meta uw-gold", block.title);
@@ -2670,6 +2626,7 @@ const Workout = (() => {
     const previous = button(footer, "Previous", () => go(state.pos - 1), "uw-quiet"); previous.disabled = state.pos === 0;
   }
   function render() {
+    refreshLoadedHistory = () => {};
     stopAllClocks();
     const scheduled = week.days[active], recovery = WorkoutSession.recoveryFor(week, scheduled.key, DATE);
     const dated = WorkoutSession.sessionFor(week, scheduled.key, DATE), day = dated || scheduled;
@@ -2744,7 +2701,7 @@ const Workout = (() => {
     mounting = true;
     container.textContent = ""; root = el(container, "div", "wkt");
     const loading = el(root, "p", "uw-small", "Loading week from repo…");
-    try { DATE = todayISO(); await loadAll(); }
+    try { DATE = todayISO(); await loadCore(); }
     catch (e) {
       loading.textContent = `Could not load workout: ${e.message}`;
       loading.setAttribute("role", "alert");
@@ -2782,24 +2739,13 @@ const Workout = (() => {
     planEl = el(root, "div", "uw-planline");
     planDatesEl = el(planEl, "div", "uw-plan-dates");
     button(planEl, "Full plan & notes", overview, "uw-quiet");
-    const historyNotice = el(root, "div", "uw-small"); historyNotice.setAttribute("role", "status");
-    function paintHistoryNotice() {
-      historyNotice.textContent = "";
-      if (!historyWarning) return;
-      el(historyNotice, "p", null, `Workout history is incomplete. ${historyWarning} Previous weights may be missing; your workout can still be logged.`);
-      const retry = button(historyNotice, "Retry workout history", async () => {
-        retry.disabled = true; retry.textContent = "Retrying…";
-        try { await loadHistory(); render(); }
-        catch (error) { historyWarning = error.message; }
-        finally { paintHistoryNotice(); }
-      });
-    }
-    paintHistoryNotice();
+    historyNotice = el(root, "div", "uw-small"); historyNotice.setAttribute("role", "status");
     WorkoutReview.mount(el(root, "div"));
     host = el(root, "div");
     statusEl = el(root, "p", "uw-status uw-small"); statusEl.setAttribute("role", "status"); statusEl.setAttribute("aria-live", "polite");
     dialog = makeDialog("Workout detail"); dialogBody = dialog.body; weightDialog = makeDialog("Bodyweight", true);
     render();
+    void refreshHistory();
   }
 
   return { mount };
