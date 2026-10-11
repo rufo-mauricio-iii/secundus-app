@@ -2349,7 +2349,7 @@ const Workout = (() => {
   let model, state, ui = {}, activeClock = null, dialog, dialogBody, weightDialog;
   let titleEl, subtitleEl, kickerEl, statusEl, gearSelect;
   const uiKey = () => `wkt-workspace:${store.repo}:${DATE}:${week.week_start}${week.revision ? ":" + week.revision : ""}`;
-  const stateKey = () => `${week.days[active].key}|${gear}`;
+  const stateKey = () => `${week.days[active].key}|${WorkoutSession.sessionFor(week, week.days[active].key, DATE)?.date || gear}`;
   function saveUI() {
     try { localStorage.setItem(uiKey(), JSON.stringify(ui)); return true; }
     catch (_) { announce("Device storage failed. Keep this page open; progress could not be saved."); return false; }
@@ -2387,9 +2387,10 @@ const Workout = (() => {
     model.blocks.filter(b => b.kind !== "end").forEach(block => {
       const section = el(dialogBody, "section", "uw-overblock");
       button(section, `${block.label || block.title}${block.rounds > 1 ? ` · ${roundLabel(block.rounds)}` : ""}`, () => {
+        if (model.source.preview) return;
         dialog.panel.close(); pickBlock(block);
       }, "uw-link");
-      if (block.rest) el(section, "p", "uw-small", `${block.rest}s between rounds`);
+      if (block.rest) el(section, "p", "uw-small", model.source.rest_range ? `${model.source.rest_range.join("–")}s between sets` : `${block.rest}s between rounds`);
       block.items.forEach(item => {
         const row = el(section, "div", "uw-overrow");
         el(row, "span", null, item.n);
@@ -2420,10 +2421,10 @@ const Workout = (() => {
   function draft(step) {
     if (!state.drafts[step.canon]) {
       const saved = logIndex.get(entryKey(DATE, week.days[active].key, step.canon)) || {};
-      const previous = lastLogged(step.canon) || {}, rx = prescription(step.item, step.meta);
+      const previous = model.source.fixed_rounds ? {} : lastLogged(step.canon) || {}, rx = prescription(step.item, step.meta);
       const chosen = (key, fallback) => saved[key] !== undefined && saved[key] !== "" ? String(saved[key])
         : previous[key] !== undefined && previous[key] !== "" ? String(previous[key]) : numFrom(fallback);
-      state.drafts[step.canon] = { weight: isBodyweight(rx.load) ? "0" : chosen("weight", rx.load), reps: chosen("reps", rx.reps) };
+      state.drafts[step.canon] = { weight: isBodyweight(rx.load) ? "0" : chosen("weight", model.source.fixed_rounds ? "" : rx.load), reps: chosen("reps", rx.reps) };
     }
     return state.drafts[step.canon];
   }
@@ -2605,7 +2606,7 @@ const Workout = (() => {
       }
     } else if (block.kind !== "end") el(top, "span", "uw-meta", "One pass");
     if (block.kind === "end") { finish(main); return; }
-    if (block.kind === "ss") {
+    if (block.kind === "ss" && block.items.length > 1) {
       const pair = el(main, "div", "uw-pair"); pair.setAttribute("aria-label", "Paired movements");
       block.items.forEach((item, i) => {
         const b = button(pair, `${String.fromCharCode(65 + i)} · ${cleanName(item.n)}`, () => go(model.steps.findIndex(s => s.block === block && s.round === step.round && s.index === i)));
@@ -2620,9 +2621,10 @@ const Workout = (() => {
   }
   function render() {
     stopAllClocks();
-    const day = week.days[active], recovery = WorkoutSession.recoveryFor(week, day.key, DATE);
-    gearSelect.disabled = Boolean(recovery);
-    gearSelect.parentElement.style.display = recovery ? "none" : "";
+    const scheduled = week.days[active], recovery = WorkoutSession.recoveryFor(week, scheduled.key, DATE);
+    const dated = WorkoutSession.sessionFor(week, scheduled.key, DATE), day = dated || scheduled;
+    gearSelect.disabled = Boolean(recovery || dated);
+    gearSelect.parentElement.style.display = recovery || dated ? "none" : "";
     if (recovery) {
       model = { blocks: [], steps: [], source: recovery, title: recovery.title, movements: 0 };
       tabEls.forEach((tab, index) => tab.setAttribute("aria-pressed", String(index === active)));
@@ -2638,6 +2640,23 @@ const Workout = (() => {
       return;
     }
     model = WorkoutSession.build(day, gear, week.room_session, resolveMovement);
+    if (dated?.preview) {
+      tabEls.forEach((tab, index) => tab.setAttribute("aria-pressed", String(index === active)));
+      titleEl.textContent = dated.title;
+      kickerEl.textContent = `Upcoming · ${dayNames[active]} · ${formatDate(dated.date)}`;
+      subtitleEl.textContent = dated.tag;
+      host.textContent = "";
+      const card = el(host, "section", "uw-main"); card.setAttribute("aria-label", "Upcoming dated workout");
+      el(card, "h2", "uw-gold", `${model.movements} exercises · ${dated.fixed_rounds} sets each`);
+      model.blocks.filter(block => block.items.length).forEach(block => {
+        const row = el(card, "div", "uw-overrow");
+        el(row, "span", null, block.title);
+        el(row, "span", "uw-small", `${dated.fixed_rounds} × ${block.items[0].r}`);
+      });
+      prose(card, dated.note);
+      el(card, "p", "uw-small", `Applies ${formatDate(dated.date)} only. Logging opens on that date; the recurring week stays unchanged.`);
+      return;
+    }
     state = ui[stateKey()] ||= { pos: 0, marks: {}, drafts: {}, holds: {} };
     state.pos = Math.max(0, Math.min(model.steps.length - 1, Number(state.pos) || 0));
     state.marks ||= {}; state.drafts ||= {}; state.holds ||= {};
@@ -2646,7 +2665,7 @@ const Workout = (() => {
     kickerEl.textContent = `Workout · ${dayNames[active] || day.tab} · ${formatDate(DATE)}`;
     const repeated = model.blocks.filter(block => block.rounds > 1);
     const roundSummary = repeated.length ? `${repeated[0].rounds} rounds ${model.blocks.some(block => block.kind === "ss") ? "per pair" : "of core"}` : "";
-    subtitleEl.textContent = gear === "blue-r" && day.type === "strength" && day.just_move ? "Easy walk + mobility"
+    subtitleEl.textContent = dated ? `${model.movements} exercises · ${dated.fixed_rounds} sets each · ${dated.rest_range.join("–")}s rest` : gear === "blue-r" && day.type === "strength" && day.just_move ? "Easy walk + mobility"
       : [model.movements ? `${model.movements} movements` : day.tag, gear === "room" ? "mat only" : roundSummary].filter(Boolean).join(" · ");
     gearSelect.value = gear;
     host.textContent = "";

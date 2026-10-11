@@ -8,16 +8,18 @@ const WorkoutSession = (() => {
     return month ? `${month}-${parts[3]}-${parts[1]}` : String(value);
   };
   const validWeight = value => /^\d+(?:\.\d+)?$/.test(String(value ?? "").trim()) && Number(value) > 0;
-  function recoveryFor(plan, dayKey, asOf) {
+  function datedFor(plan, dayKey, asOf, field) {
     const dayIndex = plan.days.findIndex(day => day.key === dayKey);
     if (dayIndex < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return null;
     const today = new Date(asOf + "T12:00:00");
     const next = new Date(today);
     next.setDate(today.getDate() + (dayIndex - (today.getDay() + 6) % 7 + 7) % 7);
     const nextDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
-    const override = plan.recovery_overrides?.[nextDate];
+    const override = plan[field]?.[nextDate];
     return override?.day === dayKey ? { ...override, date: nextDate, preview: nextDate !== asOf } : null;
   }
+  const recoveryFor = (plan, key, date) => datedFor(plan, key, date, "recovery_overrides");
+  const sessionFor = (plan, key, date) => datedFor(plan, key, date, "session_overrides");
   function latestWeight(records, name, asOf) {
     const canon = cleanName(name).toLowerCase();
     return records.filter(row => cleanName(row.exercise).toLowerCase() === canon && row.date <= asOf && validWeight(row.weight))
@@ -44,8 +46,8 @@ const WorkoutSession = (() => {
     return match ? Number(match[1]) * (match[2][0] === "m" ? 60 : 1) : 0;
   }
   function build(day, gear, roomSession, resolve = () => ({})) {
-    const room = gear === "room" && roomSession;
-    const source = room || day, rounds = gear === "blue" ? 2 : gear === "red" ? 3 : 1;
+    const room = !day.fixed_rounds && gear === "room" && roomSession;
+    const source = room || day, rounds = source.fixed_rounds ?? (gear === "blue" ? 2 : gear === "red" ? 3 : 1);
     const blocks = [], steps = [];
     const add = (id, title, items, extra = {}) => {
       const block = { id, title, items, rounds: 1, rest: 0, kind: id, ...extra, first: steps.length, steps: [] };
@@ -64,7 +66,7 @@ const WorkoutSession = (() => {
       }
       return block;
     };
-    const justMove = gear === "blue-r" && day.type === "strength" && day.just_move;
+    const justMove = !day.fixed_rounds && gear === "blue-r" && day.type === "strength" && day.just_move;
     if (justMove) {
       add("activity", "Just move", [], { prose: justMove.items || [] });
     } else {
@@ -72,7 +74,7 @@ const WorkoutSession = (() => {
       if (source.engine) add("engine", "Engine", [], { prose: source.engine });
       (source.ss || []).forEach((block, i) => add(`ss${i}`, block.title || `Pair ${i + 1}`, block.ex || [], {
         kind: "ss", label: block.label, location: (String(block.label || "").match(/\((.*?)\)/) || [])[1] || "",
-        rounds: room ? block.rounds ?? rounds : rounds, rest: room ? block.rest ?? 60 : i === 0 ? 90 : 60,
+        rounds: room ? block.rounds ?? rounds : rounds, rest: source.rest_seconds ?? (room ? block.rest ?? 60 : i === 0 ? 90 : 60),
       }));
       const finishers = source.finisher || [], title = day.type === "engine" && !room ? "Core" : "Finisher";
       if (finishers.some(item => item.rounds)) {
@@ -85,6 +87,6 @@ const WorkoutSession = (() => {
     return { blocks, steps, source, title: justMove ? "Just move" : source.title || day.title,
       movements: blocks.reduce((n, block) => n + block.items.length, 0) };
   }
-  return { cleanName, formatDate, prescription, isBodyweight, target, seconds, build, latestWeight, recoveryFor };
+  return { cleanName, formatDate, prescription, isBodyweight, target, seconds, build, latestWeight, recoveryFor, sessionFor };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = WorkoutSession;
