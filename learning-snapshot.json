@@ -1,0 +1,496 @@
+{
+  "foundations": {
+    "explainers": [
+      {
+        "editorial_implication": "For a trial, write separate acceptance questions for capability and recovery.",
+        "example": "Hypothetical worked example: a library robot correctly identifies a red book, walks to a cart and puts the book down. When the book slips, a librarian resets its grip. This trial demonstrates several abilities, but recovery still belongs to the librarian. In a second invented trial, the cart moves and the robot cannot find it: recognition of the book has not transferred into successful navigation. In a third, unfamiliar glossy covers cause picking failures despite practice with matte covers. The three results point to different gaps—recovery, movement and generalization—so a single successful-task score would conceal what needs improvement. None of these trials describes a real product.",
+        "id": "autonomy",
+        "preview": "Separate perception, movement, manipulation and recovery.",
+        "questions": [
+          "Which ability does the reviewed development actually demonstrate, and what remains untested?",
+          "Would the result survive a changed object, setting or failed first attempt?",
+          "What practice data might be missing from this hypothetical trial, and how would you check transfer from simulation?"
+        ],
+        "related": [
+          "compute-placement",
+          "productive-hour-economics"
+        ],
+        "source": {
+          "access_note": "Labelled Paid. Public levels, picking, learning and recovery sections only; no paid-only access claimed.",
+          "article_date": "2025-07-30",
+          "publisher": "SemiAnalysis",
+          "title": "Robotics Levels of Autonomy",
+          "url": "https://newsletter.semianalysis.com/p/robotics-levels-of-autonomy"
+        },
+        "subtopics": [
+          "models-reasoning",
+          "data-simulation",
+          "safety-reliability"
+        ],
+        "synopsis": [
+          "SemiAnalysis's proposed framework has five levels: Scripted Motion, Intelligent Pick and Place, Autonomous Mobility, Low-skill Manipulation and Force-dependent Tasks. This is the authors' taxonomy, not an industry standard. Recognizing an object does not establish that a robot can reach it, handle it correctly or resume work after failure. Moving through a site adds navigation; manipulating objects adds coordination; delicate work requires sensitivity to contact and force. Each capability unlocks different possible applications.",
+          "The framework centers commercial usefulness. Reliability alone is insufficient: enough throughput must also justify deployment. The picking discussion shows how recovery delays and integration with surrounding operations can undermine a capable machine. A successful demonstration leaves these repeated-operation questions unanswered. Learning connects the levels: varied visual and action data can help a policy handle unfamiliar situations, while simulation offers practice whose physical assumptions may not transfer to reality. Generalization and recovery therefore matter alongside task success. The authors' predictions of broader labor replacement remain forecasts."
+        ],
+        "title": "What autonomy actually requires"
+      },
+      {
+        "editorial_implication": "Map decisions before comparing compute offers.",
+        "example": "Hypothetical worked example: a museum guide robot uses a remote planner to choose a quiet route and local control to maintain its stance. The connection pauses while a visitor approaches. In this invented design, local sensing stops movement and the robot tells the visitor it is waiting for a route update. Balance does not wait for the remote answer. A second design uses a smaller local planner and continues along a less convenient route. The first trades continued service for access to remote planning; the second trades planning capability for independence. Comparing only model size would miss this difference in the visitor's experience. These are design illustrations, not performance claims.",
+        "id": "compute-placement",
+        "preview": "Connect capacity, power, timing and connectivity.",
+        "questions": [
+          "Is the new model choosing goals, generating motion, or closing a fast feedback loop?",
+          "What happens when a command arrives late or connectivity disappears?",
+          "Does the comparison measure task success, serving cost, or a reconstruction of computation?"
+        ],
+        "related": [
+          "autonomy",
+          "components-supply-chains",
+          "productive-hour-economics"
+        ],
+        "source": {
+          "access_note": "Labelled Paid. Public embodiment, model-layer and cost-benchmark sections only; no paid-only access claimed.",
+          "article_date": "2026-09-14",
+          "publisher": "SemiAnalysis",
+          "title": "A Brain Too Big to Carry — On-Device vs Datacenter Inference",
+          "url": "https://newsletter.semianalysis.com/p/a-brain-too-big-to-carry-on-device"
+        },
+        "subtopics": [
+          "models-reasoning",
+          "hardware-control",
+          "safety-reliability"
+        ],
+        "synopsis": [
+          "SemiAnalysis separates computation into planning, action generation and servo or safety feedback. Planning interprets instructions and chooses objectives; lower layers generate motion and respond to contact or slipping. A 100 Hz loop has 10 milliseconds for its output, while a 5 Hz planner has 200 milliseconds. Wireless network travel can consume a fast loop's budget, so the authors keep rapid feedback onboard. Slower planning leaves more room for remote inference. Irregular network delays (jitter) complicate that split when average latency looks acceptable.",
+          "Placement trades the robot's power and compute limits against shared machines. Local processing restricts which models fit; remote processing introduces connectivity and timing requirements. Shared datacenter resources may improve fleet utilization, but economics depend on workload and operating assumptions. The article's benchmark reconstructs a model's computational shape to estimate serving cost, not task accuracy. The case for offloading is conditional: a cheaper serving architecture does not establish that its robot completes a job reliably."
+        ],
+        "title": "Where should the robot think?"
+      },
+      {
+        "editorial_implication": "Identify the physical bottleneck left by software.",
+        "example": "Hypothetical worked example: a robot sorting reusable cups recognizes a soft cup correctly but squeezes it out of shape. A better recognition model would not by itself fix that failure. In this invented design, changing the gripper and its force setting solves the first trial. The next batch of grippers flexes differently, so the same setting produces inconsistent results. The problem has moved from task design to repeatable manufacturing and calibration. The camera, controller and physical contact all belong to one chain: success requires the right command, a mechanism that can carry it out, and parts that behave as expected. This is an illustration, not a reported deployment.",
+        "id": "components-supply-chains",
+        "preview": "Connect components, integration and scale.",
+        "questions": [
+          "Which component converts this command into motion, and which measurement confirms the result?",
+          "Does the proposed improvement survive a different payload or end effector?",
+          "What must be revalidated after a supplier or part changes?"
+        ],
+        "related": [
+          "compute-placement",
+          "quadruped-deployment",
+          "productive-hour-economics"
+        ],
+        "source": {
+          "access_note": "Public hardware/supply-chain sections; no Paid header. Industrial-policy forecasts remain dated arguments.",
+          "article_date": "2025-03-11",
+          "publisher": "SemiAnalysis",
+          "title": "America Is Missing The New Labor Economy - Robotics Part 1",
+          "url": "https://newsletter.semianalysis.com/p/america-is-missing-the-new-labor-economy-robotics-part-1"
+        },
+        "subtopics": [
+          "hardware-control"
+        ],
+        "synopsis": [
+          "SemiAnalysis describes robotics as integration across software and parts. Controllers read sensors and issue commands. Drives regulate electrical power supplied to motors; motors produce motion; gearboxes trade speed for torque. Feedback helps a servo maintain movement. Cameras describe surroundings, joint encoders report joint position or speed, and force-related sensors add information about physical interaction. The end effector, such as a tool or gripper, determines how the machine engages its particular task.",
+          "Components must work together repeatedly, beyond simply appearing on a parts list. The authors link manufacturability, sourcing and design revisions to cost and the ability to scale reliable hardware. Nearby suppliers can shorten the cycle between discovering a problem and trying a revised component. Their supply-chain argument also distinguishes access to raw materials from the processing and production capacity needed for usable parts. Their predictions about national industrial advantage are advocacy and forecasts, not a guarantee of any robot's performance."
+        ],
+        "title": "From a command to useful motion"
+      },
+      {
+        "editorial_implication": "Assign owners to missing functions.",
+        "example": "Hypothetical worked example: a greenhouse robot completes its morning route but photographs a gauge through a leaf. The operator receives an unreadable image, so the walking mission succeeded while the inspection failed. In a revised invented workflow, the application flags the obscured reading and the robot tries another viewpoint. A closed door still requires help, and the record explicitly marks that missed location. The useful deliverable is now a set of readings with visible exceptions. Hardware carries the camera, autonomy reaches the locations, and the application turns observations into a record the operator can act on. No greenhouse or vendor performance is asserted here.",
+        "id": "quadruped-deployment",
+        "preview": "Walking needs applications.",
+        "questions": [
+          "What useful output is delivered after the robot reaches its destination?",
+          "Who supplies the payload, autonomy, integration and exception handling?",
+          "Were the reported results observed in the same environment as the proposed deployment?"
+        ],
+        "related": [
+          "autonomy",
+          "components-supply-chains",
+          "productive-hour-economics"
+        ],
+        "source": {
+          "access_note": "Labelled Paid. Public autonomy, integration and applications only. Paid bills of materials and market sizing excluded.",
+          "article_date": "2025-10-20",
+          "publisher": "SemiAnalysis",
+          "title": "Quadruped State of The Market - Unitree, Boston Dynamics, ANYbotics, DEEP Robotics, and The Rising Application Ecosystem",
+          "url": "https://newsletter.semianalysis.com/p/quadruped-state-of-the-market-unitree"
+        },
+        "subtopics": [
+          "deployments",
+          "hardware-control",
+          "safety-reliability"
+        ],
+        "synopsis": [
+          "SemiAnalysis treats a quadruped as a platform for an application. Legs help traverse clutter, height changes and constrained spaces. Useful inspection then needs sensing, a route, positioning and interpretation of observations. The article separates core autonomy, task software and integration: reaching equipment differs from reading its gauge or delivering the result into a workflow. Walking alone does not complete the inspection system.",
+          "Examples show the layers: Boston Dynamics supplies Spot, Unitree emphasizes hardware, Chironix integrates sensors and infrastructure, and Formant provides fleet management and telemetry. Integrators configure payloads and site connections; application vendors support missions and operator-facing information. Unfamiliar situations can disrupt planning or positioning even when navigation works in familiar settings. Dependability belongs to the assembled system in its operating environment. Their adoption forecast remains an unproven outlook, not evidence of universal reliability. These are complementary responsibilities: the account does not establish that any vendor supplies every required function."
+        ],
+        "title": "From walking platform to inspection system"
+      },
+      {
+        "editorial_implication": "Build a task-specific cost ledger before treating a price cut as progress.",
+        "example": "Hypothetical worked example with invented numbers: over one shift, ownership and setup allocation cost $40, assistance costs $30, and energy plus maintenance cost $10. Total cost is $80. If the robot delivers four productive hours, that is $20 per productive hour. If waiting and recovery leave only two productive hours while those costs stay unchanged, it becomes $40 per productive hour. A purchase discount that saves $5 per shift would change the second result to $37.50, not restore the first result. The arithmetic shows why idle time and assistance can outweigh a lower sticker price. These numbers are solely instructional and make no claim about Unitree or any real deployment.",
+        "id": "productive-hour-economics",
+        "preview": "Count utilization, assistance and operating costs.",
+        "questions": [
+          "What counts as accepted output, and how much scheduled time produces it?",
+          "Which human assistance, integration and operating costs are included?",
+          "Is the reported economic result measured in operation or calculated from assumptions?"
+        ],
+        "related": [
+          "autonomy",
+          "compute-placement",
+          "quadruped-deployment"
+        ],
+        "source": {
+          "access_note": "Labelled Paid. Public actuator and economics discussion only; paid hands and suppliers excluded. Cycle-test results unavailable.",
+          "article_date": "2026-06-08",
+          "publisher": "SemiAnalysis",
+          "title": "Unitree's Impossible Trajectory Is Still Overlooked",
+          "url": "https://newsletter.semianalysis.com/p/chinas-unitree-will-dominate-global"
+        },
+        "subtopics": [
+          "deployments",
+          "safety-reliability"
+        ],
+        "synopsis": [
+          "SemiAnalysis connects Unitree's strategy to its quasi-direct-drive (QDD) actuators: a larger motor with a low-ratio gearbox. This simplifies production and reduces cost, but places more torque demand and thermal burden on the motor. Improvements may extend working time; the authors lack cycle-test results, so their assessment does not establish lifetime durability. A low hardware price is the beginning of deployment economics.",
+          "Their economic scenario concerns lightweight tote transfers. Cooling and charging reduce productive time, throughput determines accepted work, and human teleoperation and service cost money. The model assumes full teleoperation, a useful life and operating shifts, while acknowledging missing integration and safety layers. Utilization means how much available time produces work: a cheap robot sitting idle cannot spread its costs across output. The authors argue that selected deployments may be viable and scale may improve the position. These are task-dependent estimates and forecasts, not a cost advantage for every buyer."
+        ],
+        "title": "Count useful work, not just purchase price"
+      }
+    ],
+    "reading_order": [
+      "autonomy",
+      "compute-placement",
+      "components-supply-chains",
+      "quadruped-deployment",
+      "productive-hour-economics"
+    ]
+  },
+  "main_topic": {
+    "id": "physical-ai-robotics",
+    "title": "Physical AI & robotics"
+  },
+  "news": {
+    "baseline_at": "2026-10-11T04:05:04.218616+00:00",
+    "citations": [
+      {
+        "date": "2026-09-10",
+        "date_basis": "source page date (scan attribution)",
+        "evidence_kind": "primary-source web scan",
+        "historical": false,
+        "publisher": "NVIDIA",
+        "source_id": "0aa589052ac8df6f4087e30bed8a592fab72dff6c586f82a987ffd14e7091025",
+        "title": "Skild S1 video-based task learning",
+        "url": "https://blogs.nvidia.com/blog/skild-ai-s1-physical-ai/"
+      },
+      {
+        "date": "2026-10-01",
+        "date_basis": "source page date (scan attribution)",
+        "evidence_kind": "primary-source web scan",
+        "historical": false,
+        "publisher": "Agility Robotics",
+        "source_id": "1690d98f78d1f0f9aa3cec40ac9ab0baa2f382853863c2e9fa5c297f35212b78",
+        "title": "Agility and FORT safety partnership",
+        "url": "https://www.agilityrobotics.com/content/agility-and-fort-robotics-announce-strategic-partnership-to-advance-humanoid-robot-safety"
+      },
+      {
+        "date": "2026-09-17",
+        "date_basis": "source page date (scan attribution)",
+        "evidence_kind": "primary-source web scan",
+        "historical": false,
+        "publisher": "Figure",
+        "source_id": "68a1a81606895d47ddc4f63e8f1b397973662cdf9820869bb5d9a1dee592fbaf",
+        "title": "Helix 2.5: Zero-Shot 30-Home Generalization",
+        "url": "https://www.figure.ai/news/helix-2-5-zero-shot-30-home-generalization"
+      },
+      {
+        "date": "2026-10-08T23:00:09.000000+00:00",
+        "date_basis": "feed date (published or updated; original basis unknown)",
+        "evidence_kind": "feed excerpt",
+        "historical": false,
+        "publisher": "Google for Developers",
+        "source_id": "68db3f8e63693acd3e4ce18341d035bef7cc5dfbf5e58bb5338656068f22c18d",
+        "title": "Building with Gemma 4",
+        "url": "https://www.youtube.com/watch?v=fL9OBJO3Gu8"
+      },
+      {
+        "date": "2026-10-09T19:00:36.000000+00:00",
+        "date_basis": "feed date (published or updated; original basis unknown)",
+        "evidence_kind": "feed excerpt",
+        "historical": false,
+        "publisher": "Google for Developers",
+        "source_id": "8f9ef94c1d0469f722afc2d6511bc745e2c5dabf43678201bffee54c309f45d2",
+        "title": "🤖 Operating real hardware with Gemini AI",
+        "url": "https://www.youtube.com/shorts/fMgcm9aXZyY"
+      },
+      {
+        "date": "2026-09-22",
+        "date_basis": "source page date (scan attribution)",
+        "evidence_kind": "primary-source web scan",
+        "historical": false,
+        "publisher": "NVIDIA",
+        "source_id": "91671cbf8450e251f6382790c7ccd21b0cc250115f7c19ae25fbb1b42227ad98",
+        "title": "Isaac ROS 5.0 release",
+        "url": "https://blogs.nvidia.com/blog/isaac-ros-5-0-agentic-open-source-robotics/"
+      },
+      {
+        "date": "2026-07-30",
+        "date_basis": "source page date (scan attribution)",
+        "evidence_kind": "primary-source web scan",
+        "historical": false,
+        "publisher": "Google DeepMind",
+        "source_id": "b29902cb57b778f134839fa51db96fcfde5595cd3a5ed04e757c16579ca1e87c",
+        "title": "Gemini Robotics 2",
+        "url": "https://deepmind.google/blog/gemini-robotics-2-brings-whole-body-intelligence-to-robots/"
+      },
+      {
+        "date": "2026-10-09T16:00:10.000000+00:00",
+        "date_basis": "feed date (published or updated; original basis unknown)",
+        "evidence_kind": "feed excerpt",
+        "historical": false,
+        "publisher": "Google for Developers",
+        "source_id": "db93a109e548d2f93cafdb922694ab33d42e752b6538deba1d3772e9afe4a232",
+        "title": "Building low-latency remote robotics with Gemini",
+        "url": "https://www.youtube.com/watch?v=7sKHiuE7J-Y"
+      },
+      {
+        "date": "2026-09-15",
+        "date_basis": "source page date (scan attribution)",
+        "evidence_kind": "primary-source web scan",
+        "historical": false,
+        "publisher": "Agility Robotics",
+        "source_id": "f532d9cc55d05b17c62e9dddfee3a7b4552b7f3f61528a03f46f1edba1849b6e",
+        "title": "Agility introduces Digit 5",
+        "url": "https://www.agilityrobotics.com/content/agility-unveils-digit-5-humanoid-robot-built-for-cooperatively-safe-work-at-scale"
+      }
+    ],
+    "context": [
+      {
+        "development_keys": [
+          "figure-index-pretraining-zero-shot-success-result",
+          "skild-s1-video-task-learning-without-weight-updates"
+        ],
+        "kind": "synthesis",
+        "source_ids": [
+          "68a1a81606895d47ddc4f63e8f1b397973662cdf9820869bb5d9a1dee592fbaf",
+          "0aa589052ac8df6f4087e30bed8a592fab72dff6c586f82a987ffd14e7091025"
+        ],
+        "text": "The retained Figure quotation attributes a rise in zero-shot success from 9% to 56% to Index pretraining. The retained Skild quotation describes behavior without weight updates or task-specific post-training. These support separate accounts of a training intervention and use of an already trained model; the researcher's notes add the evaluation and video-prompt context."
+      },
+      {
+        "development_keys": [
+          "figure-index-pretraining-zero-shot-success-result",
+          "skild-s1-video-task-learning-without-weight-updates"
+        ],
+        "kind": "uncertainty",
+        "source_ids": [],
+        "text": "The researcher labels Figure's measure complete-task success and Skild's measure per-step success. Neither the short quotations nor those unlike measures support a performance ranking. Prior training, task selection, sequence length and intervention policies remain unresolved. The retained Figure evidence does not identify human-video inputs, so this baseline does not justify proposing human-video-to-robot learning as a shared emerging subtopic."
+      },
+      {
+        "development_keys": [
+          "google-gemini-remote-robotics-web-controllers",
+          "google-developers-features-offline-reachy-lfg3-build",
+          "nvidia-isaac-ros-5-release"
+        ],
+        "kind": "interpretation",
+        "source_ids": [],
+        "text": "Separate three questions when reading these developments: does a tool help a person build a system, where does its model run, and what tasks can the resulting robot perform reliably? The remote-controller project, offline Reachy description and Isaac ROS release each provide an entry point into the first two questions. Their retained evidence does not answer the third."
+      },
+      {
+        "development_keys": [
+          "agility-digit5-announcement-digit4-operating-history",
+          "agility-fort-safety-partnership-mou"
+        ],
+        "kind": "synthesis",
+        "source_ids": [
+          "f532d9cc55d05b17c62e9dddfee3a7b4552b7f3f61528a03f46f1edba1849b6e",
+          "1690d98f78d1f0f9aa3cec40ac9ab0baa2f382853863c2e9fa5c297f35212b78"
+        ],
+        "text": "Agility's retained operating-history claim belongs to Digit 4. Its later FORT announcement records a memorandum of understanding. These are distinct developments from the same vendor: predecessor operational history and an announced partnership. Neither retained quotation measures Digit 5's delivered performance or safety."
+      },
+      {
+        "development_keys": [
+          "figure-index-pretraining-zero-shot-success-result",
+          "skild-s1-video-task-learning-without-weight-updates",
+          "google-gemini-remote-robotics-web-controllers",
+          "agility-fort-safety-partnership-mou"
+        ],
+        "kind": "question",
+        "source_ids": [],
+        "text": "What evidence would connect these announcements to dependable operation: full-task completion and human-intervention rates for learning claims; latency distributions and safe behavior after connection loss for remote control; and delivered interfaces, operating conditions and observed safety outcomes for the partnership? These are follow-up questions, not capabilities established by this packet."
+      },
+      {
+        "development_keys": [
+          "google-gemini-remote-robotics-web-controllers",
+          "google-developers-features-offline-reachy-lfg3-build",
+          "agility-fort-safety-partnership-mou",
+          "nvidia-isaac-ros-5-release",
+          "figure-index-pretraining-zero-shot-success-result",
+          "agility-digit5-announcement-digit4-operating-history",
+          "skild-s1-video-task-learning-without-weight-updates",
+          "google-gemini-robotics2-multi-robot-collaboration"
+        ],
+        "kind": "uncertainty",
+        "source_ids": [],
+        "text": "This is a dated, non-exhaustive seed baseline dominated by company and interested-partner material. Google's two controller descriptions repeat one event; NVIDIA supplies two distinct developments and Agility two related announcements. None provides independent validation. All three archive items are video metadata, and the six scan sources retain only short original excerpts plus attributed researcher notes. October feed dates may be updates; September page dates identify older reports, and July's collaboration announcement is background. The October 10 scan date is not an event date."
+      }
+    ],
+    "developments": [
+      {
+        "event_key": "google-gemini-remote-robotics-web-controllers",
+        "first_published_at": "2026-10-11T04:05:04.218616+00:00",
+        "headline": "Google describes a Gemini-assisted remote robotics project spanning 1,700 miles",
+        "last_changed_at": "2026-10-11T04:05:04.218616+00:00",
+        "source_ids": [
+          "db93a109e548d2f93cafdb922694ab33d42e752b6538deba1d3772e9afe4a232",
+          "8f9ef94c1d0469f722afc2d6511bc745e2c5dabf43678201bffee54c309f45d2"
+        ],
+        "subtopics": [
+          "hardware-control"
+        ],
+        "uncertainties": "The two descriptions identify the same people, distance and controller project and are correctly grouped as one development. Both come from Google for Developers. Metadata supplies no measured latency, network conditions, failure recovery or safety evaluation; 'real time' remains Google's description. The feed dates do not establish original publication dates.",
+        "what_happened": "Two Google for Developers feed descriptions dated October 9, 2026 describe the same project: Matías and David used Gemini, Google Antigravity and Google AI Studio to build custom 3D web controllers for physical hardware 1,700 miles away. These descriptions document an AI-assisted build; they do not establish autonomous robot operation. The videos were not watched, and the stored feed dates may represent publication or update.",
+        "why_it_matters": "Interpretation: AI-assisted construction of a remote control interface could make hardware experimentation more accessible. The learning value here is how software tooling connects people to machinery; the retained descriptions do not establish that Gemini autonomously plans or controls robot actions."
+      },
+      {
+        "event_key": "google-developers-features-offline-reachy-lfg3-build",
+        "first_published_at": "2026-10-11T04:05:04.218616+00:00",
+        "headline": "Google features an offline Reachy robot running LFG-3",
+        "last_changed_at": "2026-10-11T04:05:04.218616+00:00",
+        "source_ids": [
+          "68db3f8e63693acd3e4ce18341d035bef7cc5dfbf5e58bb5338656068f22c18d"
+        ],
+        "subtopics": [
+          "models-reasoning",
+          "hardware-control"
+        ],
+        "uncertainties": "The retained metadata names LFG-3, Reachy Mini and NVIDIA DGX Spark, but gives no measured task performance, power use or response time. 'Offline' is a source characterization, and no demonstration was watched. The Gemma video title does not by itself establish the architecture or autonomy of LFG-3.",
+        "what_happened": "Google for Developers' Building with Gemma 4 description features an offline robot running LFG-3 on a Reachy Mini and NVIDIA DGX Spark. The stored feed date is October 8, 2026; the original publication date is unconfirmed. This account comes from video metadata, not a watched demonstration, and establishes no measured autonomy or reliability result.",
+        "why_it_matters": "Interpretation: The named offline build is a concrete example for examining where a robot's model runs and what supporting hardware it needs. It motivates questions about connectivity dependence and local resource requirements without establishing benefits on either dimension."
+      },
+      {
+        "event_key": "agility-fort-safety-partnership-mou",
+        "first_published_at": "2026-10-11T04:05:04.218616+00:00",
+        "headline": "Agility and FORT announce a safety partnership memorandum",
+        "last_changed_at": "2026-10-11T04:05:04.218616+00:00",
+        "source_ids": [
+          "1690d98f78d1f0f9aa3cec40ac9ab0baa2f382853863c2e9fa5c297f35212b78"
+        ],
+        "subtopics": [
+          "safety-reliability",
+          "deployments"
+        ],
+        "uncertainties": "The retained quotation supports a memorandum of understanding; the page metadata identifies the parties. Specific interfaces and Digit 5 scope appear in the researcher's attributed note, not the retained quotation. This later agreement is a distinct event from the Digit 5 announcement, but the same publisher and product relationship do not provide independent corroboration.",
+        "what_happened": "Agility Robotics' page dated October 1, 2026 announces a memorandum of understanding outlining a partnership with FORT Robotics. The announcement records an agreement; the cited excerpt does not establish delivered or validated safety performance.",
+        "why_it_matters": "Interpretation: A safety partnership is a useful signal to follow because practical deployment depends on safety integration as well as robot capability. Its present evidentiary value is that the companies announced an agreement, not that a safety architecture has been delivered or validated."
+      },
+      {
+        "event_key": "nvidia-isaac-ros-5-release",
+        "first_published_at": "2026-10-11T04:05:04.218616+00:00",
+        "headline": "NVIDIA announces Isaac ROS 5.0 as available, free and open source",
+        "last_changed_at": "2026-10-11T04:05:04.218616+00:00",
+        "source_ids": [
+          "91671cbf8450e251f6382790c7ccd21b0cc250115f7c19ae25fbb1b42227ad98"
+        ],
+        "subtopics": [
+          "hardware-control"
+        ],
+        "uncertainties": "The exact quotation supports NVIDIA's availability, free and open-source claims. It does not establish particular workflow improvements, compatibility, licensing details, speed or reliability. Richer feature descriptions remain attributed scan notes and are appropriately absent from the factual release account.",
+        "what_happened": "NVIDIA's release page dated September 22, 2026 says Isaac ROS 5.0 is available, free and open source. The retained excerpt establishes the release claim but provides no measured speed or reliability results.",
+        "why_it_matters": "Interpretation: An available software release gives developers a concrete tool to evaluate. Its relevance to hardware and control is the possibility of changing the effort required to build a robot system; availability alone says little about the resulting robot's competence."
+      },
+      {
+        "event_key": "figure-index-pretraining-zero-shot-success-result",
+        "first_published_at": "2026-10-11T04:05:04.218616+00:00",
+        "headline": "Figure reports higher zero-shot success after Index pretraining",
+        "last_changed_at": "2026-10-11T04:05:04.218616+00:00",
+        "source_ids": [
+          "68a1a81606895d47ddc4f63e8f1b397973662cdf9820869bb5d9a1dee592fbaf"
+        ],
+        "subtopics": [
+          "data-simulation",
+          "models-reasoning"
+        ],
+        "uncertainties": "Figure reports the result. Only the researcher's note identifies complete-task success, three household behaviors, 30 unseen homes and behavior-specific training elsewhere. The retained quotation does not establish that protocol or any human-video training input. 'Zero-shot' should not be read as absence of all task training, and 56% is not comparable to Skild's reported per-step measure.",
+        "what_happened": "Figure's Helix 2.5 page dated September 17, 2026 attributes an increase in zero-shot success from 9% to 56% to Index pretraining. This is a company-reported training result. The researcher's accompanying scan note identifies the measure as complete-task success; the short original excerpt does not spell out the evaluation protocol. It should not be compared with a per-step success rate.",
+        "why_it_matters": "Interpretation: The reported increase makes prior training a concrete variable to investigate when studying robot generalization. It invites scrutiny of what changes between the baseline and pretrained system and which parts of task competence transfer to a new setting."
+      },
+      {
+        "event_key": "agility-digit5-announcement-digit4-operating-history",
+        "first_published_at": "2026-10-11T04:05:04.218616+00:00",
+        "headline": "Agility cites Digit 4's 65,000-plus operating hours in its Digit 5 announcement",
+        "last_changed_at": "2026-10-11T04:05:04.218616+00:00",
+        "source_ids": [
+          "f532d9cc55d05b17c62e9dddfee3a7b4552b7f3f61528a03f46f1edba1849b6e"
+        ],
+        "subtopics": [
+          "deployments",
+          "hardware-control"
+        ],
+        "uncertainties": "The exact quotation attributes more than 65,000 operational hours to Digit 4. It supplies no fleet size, utilization, intervention rate, incident rate or unit economics, and none of those can be inferred from total hours. The Digit 5 announcement identity comes from source metadata; its capabilities are not established by this excerpt.",
+        "what_happened": "In its Digit 5 announcement dated September 15, 2026, Agility Robotics says Digit 4 has logged more than 65,000 hours of operational time. Those hours belong to Digit 4. They do not measure Digit 5's deployment performance, and the short retained excerpt supports no additional claim about the new model's capabilities.",
+        "why_it_matters": "Interpretation: Operating history for a predecessor can explain the vendor's deployment context, while keeping the burden of proof for a new model separate. This distinction helps prevent accumulated experience from being mistaken for demonstrated readiness of the successor."
+      },
+      {
+        "event_key": "skild-s1-video-task-learning-without-weight-updates",
+        "first_published_at": "2026-10-11T04:05:04.218616+00:00",
+        "headline": "NVIDIA describes Skild S1 video-based task learning without weight updates",
+        "last_changed_at": "2026-10-11T04:05:04.218616+00:00",
+        "source_ids": [
+          "0aa589052ac8df6f4087e30bed8a592fab72dff6c586f82a987ffd14e7091025"
+        ],
+        "subtopics": [
+          "data-simulation",
+          "models-reasoning"
+        ],
+        "uncertainties": "NVIDIA is an interested technology partner. The exact excerpt supports no weight updates or task-specific post-training; video prompting, inference-time task sequences and approximately 66% per-step success come from the attributed researcher note. The excerpt alone does not establish task difficulty, prior training, sequence length or complete-task reliability. Figure's result is a training comparison with a different reported success measure.",
+        "what_happened": "NVIDIA's Skild S1 report dated September 10, 2026 describes task learning without updating model weights or undergoing task-specific post-training. The researcher's scan note describes this as learning task sequences from a video prompt at inference time. NVIDIA is a technology partner, and the short retained excerpt does not support an independent performance assessment or comparison with Figure's pretraining result.",
+        "why_it_matters": "Interpretation: Describing new task behavior without weight updates raises a different learning question from improving a model through pretraining: what can a fixed model extract from task-time input? Keeping these mechanisms separate makes the comparison educational without implying comparable results."
+      },
+      {
+        "event_key": "google-gemini-robotics2-multi-robot-collaboration",
+        "first_published_at": "2026-10-11T04:05:04.218616+00:00",
+        "headline": "July background: Google announces multi-robot collaboration in Gemini Robotics 2",
+        "last_changed_at": "2026-10-11T04:05:04.218616+00:00",
+        "source_ids": [
+          "b29902cb57b778f134839fa51db96fcfde5595cd3a5ed04e757c16579ca1e87c"
+        ],
+        "subtopics": [
+          "models-reasoning"
+        ],
+        "uncertainties": "The page date is July 30 and the draft correctly labels this as background in the October 10 seed baseline. The retained sentence supports an introduction claim, not demonstrated multi-robot performance, whole-body control or local deployment. It is distinct from Google's remote-controller project.",
+        "what_happened": "Google DeepMind's Gemini Robotics 2 page dated July 30, 2026 says it is introducing multi-robot collaboration. This is dated July background included in the October 10 seed baseline, not a new October announcement. The retained excerpt gives no measured coordination performance.",
+        "why_it_matters": "Interpretation: Multi-robot collaboration introduces a useful question beyond the capability of a single machine: how are responsibilities and dependencies coordinated? The announcement supplies background for that question, with no retained evidence yet about coordination quality."
+      }
+    ],
+    "published_at": "2026-10-11T04:05:04.218616+00:00"
+  },
+  "schema_version": 1,
+  "subtopics": [
+    {
+      "id": "models-reasoning",
+      "title": "Models and reasoning"
+    },
+    {
+      "id": "data-simulation",
+      "title": "Training data and simulation"
+    },
+    {
+      "id": "hardware-control",
+      "title": "Hardware and control"
+    },
+    {
+      "id": "deployments",
+      "title": "Deployments and applications"
+    },
+    {
+      "id": "safety-reliability",
+      "title": "Safety and reliability"
+    }
+  ]
+}
