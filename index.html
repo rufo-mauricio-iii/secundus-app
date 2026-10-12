@@ -1224,6 +1224,28 @@ const Home = (() => {
 
   /* ---- view switching (WORKOUT/DIET host the ported Health apps) ---- */
   const VIEWS = ['home', 'todo', 'pipeline', 'academics', 'projects', 'workout', 'diet', 'builder'];
+  let academicsAsset;
+  async function mountAcademics(host) {
+    if (!host || host.dataset.acLoading || host.dataset.acMounted) return;
+    host.dataset.acLoading = '1';
+    host.textContent = 'Opening Academics…';
+    try {
+      if (!academicsAsset) academicsAsset = new Promise((resolve, reject) => {
+        const asset = document.createElement('script'); asset.src = 'academics.js'; asset.async = true;
+        const timeout = setTimeout(failed, 15000);
+        function failed() { clearTimeout(timeout); asset.remove(); reject(new Error('Academics could not load.')); }
+        asset.onload = () => { clearTimeout(timeout); resolve(); }; asset.onerror = failed; document.head.append(asset);
+      }).catch(error => { academicsAsset = null; throw error; });
+      await academicsAsset;
+      host.textContent = '';
+      await window.Academics.mount(host, { readFile });
+      host.dataset.acMounted = '1';
+    } catch (_) {
+      host.textContent = 'Academics could not load. ';
+      const retry = document.createElement('button'); retry.textContent = 'Try again';
+      retry.onclick = () => mountAcademics(host); host.append(retry);
+    } finally { delete host.dataset.acLoading; }
+  }
   function showView(root, v) {
     VIEWS.forEach(id => { const el2 = root.querySelector('#view-' + id); if (el2) el2.hidden = (id !== v); });
     root.querySelectorAll('.nav-btn[data-view]').forEach(b => b.classList.toggle('active', b.getAttribute('data-view') === v));
@@ -1232,12 +1254,13 @@ const Home = (() => {
     if (navEl && activeBtn && navEl.scrollWidth > navEl.clientWidth) {
       navEl.scrollLeft = activeBtn.offsetLeft - (navEl.clientWidth - activeBtn.offsetWidth) / 2;
     }
-    const bare = (v === 'workout' || v === 'diet');
+    const bare = (v === 'workout' || v === 'diet' || v === 'academics');
     const strip = root.querySelector('#streakStrip'); if (strip) strip.hidden = bare;
     const quote = root.querySelector('.quote-bar');   if (quote) quote.hidden = bare;
     localStorage.setItem('secundus.view', v);
     if (v === 'workout') Workout.mount(root.querySelector('#workoutBody'));
     if (v === 'diet')    Food.mount(root.querySelector('#dietBody'));
+    if (v === 'academics') mountAcademics(root.querySelector('#academicsBody'));
     window.scrollTo(0, 0);
   }
 
@@ -1629,9 +1652,7 @@ const Home = (() => {
 <div class="layout" id="view-pipeline" hidden>
 <div class="main"><div class="seal-panel"><div class="seal-glyph">&#9775;</div><div class="seal-title">Pipeline</div><div class="seal-sub">RENOVATIO &middot; coming soon</div></div></div>
 </div>
-<div class="layout" id="view-academics" hidden>
-<div class="main"><div class="seal-panel"><div class="seal-glyph">&#9775;</div><div class="seal-title">Academics</div><div class="seal-sub">RENOVATIO &middot; coming soon</div></div></div>
-</div>
+<div class="layout" id="view-academics" hidden><div class="main"><div id="academicsBody"></div></div></div>
 <div class="layout" id="view-projects" hidden>
 <div class="main"><div class="seal-panel"><div class="seal-glyph">&#9775;</div><div class="seal-title">Projects</div><div class="seal-sub">RENOVATIO &middot; coming soon</div></div></div>
 </div>

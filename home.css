@@ -1,3 +1,6 @@
+/* Academics owns its responsive content inside the existing tab frame. */
+#view-academics.layout:not([hidden]){display:block;padding:0}
+#view-academics>.main{min-width:0}
 /* home-v4 -- Renovatio V8 shell, ported from builds/drafts/secundus-v8-todo-offline.html
    for Command-Center/Dashboard/watcher (Phase 2, secundus-rebirth).
    Plain CSS -- view.js reads this file as text, resolves each font url()

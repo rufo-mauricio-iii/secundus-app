@@ -111,3 +111,19 @@
      declares a custom property at all */
   --bord:var(--hairline); --txt:var(--fg);
 }
+
+/* Academics: scoped course colors; shared shell colors retain their roles. */
+#academicsBody {
+  --surface:var(--bg-surface); --raised:var(--bg-elevated);
+  --line:var(--border); --secondary:var(--text-secondary);
+  --course-mge:#8EAFE0; --course-ob:#C3A1D6; --course-strategy:#D9B773;
+  --course-robot:#89BBAA; --course-ai:#DE9C8D;
+  --glass:#1A1813E0; --shadow:#00000080;
+  --course-color:var(--text-secondary);
+}
+.academics-root .ledger-view { --paper-line:var(--border); --paper-muted:var(--text-muted); }
+.academics-root [data-course="MGE"], .academics-root [data-course-id="229416"] { --course-color:var(--course-mge); }
+.academics-root [data-course="OB 374"], .academics-root [data-course-id="229417"] { --course-color:var(--course-ob); }
+.academics-root [data-course="STRAMGT 572"], .academics-root [data-course-id="229366"] { --course-color:var(--course-strategy); }
+.academics-root [data-course="Robot Perception"], .academics-root [data-course-id="231675"] { --course-color:var(--course-robot); }
+.academics-root [data-course="CS 224V"], .academics-root [data-course-id="230723"] { --course-color:var(--course-ai); }
