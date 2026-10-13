@@ -2452,10 +2452,11 @@ const Workout = (() => {
   }
   function initialDraft(step) {
     const saved = data.records.get(entryKey(DATE, week.days[active].key, step.canon)) || {};
-    const previous = model.source.fixed_rounds ? {} : lastLogged(step.canon) || {}, rx = prescription(step.item, step.meta);
+    const rx = prescription(step.item, step.meta);
+    const previous = model.source.fixed_rounds || /^comfortable load/i.test(rx.load) ? {} : lastLogged(step.canon) || {};
     const chosen = (key, fallback) => saved[key] !== undefined && saved[key] !== "" ? String(saved[key])
       : previous[key] !== undefined && previous[key] !== "" ? String(previous[key]) : numFrom(fallback);
-    return { weight: isBodyweight(rx.load) ? "0" : chosen("weight", model.source.fixed_rounds ? "" : rx.load), reps: chosen("reps", rx.reps) };
+    return { weight: isBodyweight(rx.load) ? "0" : chosen("weight", model.source.fixed_rounds || /^comfortable load/i.test(rx.load) ? "" : rx.load), reps: chosen("reps", rx.reps) };
   }
   function draft(step) {
     state.drafts[step.canon] ||= initialDraft(step);

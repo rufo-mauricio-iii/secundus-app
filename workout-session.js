@@ -74,7 +74,7 @@ const WorkoutSession = (() => {
       if (source.engine) add("engine", "Engine", [], { prose: source.engine });
       (source.ss || []).forEach((block, i) => add(`ss${i}`, block.title || `Pair ${i + 1}`, block.ex || [], {
         kind: "ss", label: block.label, location: (String(block.label || "").match(/\((.*?)\)/) || [])[1] || "",
-        rounds: room ? block.rounds ?? rounds : rounds, rest: source.rest_seconds ?? (room ? block.rest ?? 60 : i === 0 ? 90 : 60),
+        rounds: block.rounds ?? rounds, rest: source.rest_seconds ?? block.rest ?? (room ? 60 : i === 0 ? 90 : 60),
       }));
       const finishers = source.finisher || [], title = day.type === "engine" && !room ? "Core" : "Finisher";
       if (finishers.some(item => item.rounds)) {
