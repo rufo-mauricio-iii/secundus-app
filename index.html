@@ -337,6 +337,11 @@ function watchProject(refresh, enabled = () => true) {
   document.addEventListener("visibilitychange", poll.wake); return poll;
 }
 watchProject(() => ensureProjectOutbox().flush(), () => !!store.pat && !!store.repo);
+function appUpdateBlocked() {
+  let focused=document.activeElement;while(focused?.shadowRoot?.activeElement)focused=focused.shadowRoot.activeElement;
+  return Boolean(ensureProjectOutbox().status().pending || pendingDeviceEdits() || SYNC.inflight || Workout.busy() ||
+    focused?.matches('input,textarea,select,[contenteditable]') || document.querySelector('.k-edit,.wt-draftin,.wt-goalin,dialog[open],details[open],.backdrop.on'));
+}
 watchProject(async () => {
   const label=$("release-label");if(!label)return true;
   const response=await fetch("sync-release.json?t="+Date.now(),{cache:"no-store",credentials:"omit"});
@@ -344,11 +349,9 @@ watchProject(async () => {
   const release=await response.json(),current=document.querySelector('meta[name="secundus-release"]')?.content;
   if(release.id===current){label.textContent="App current";return true;}
   label.textContent="App update ready · edits retained";
-  let focused=document.activeElement;while(focused?.shadowRoot?.activeElement)focused=focused.shadowRoot.activeElement;
-  if(ensureProjectOutbox().status().pending || pendingDeviceEdits() || SYNC.inflight || Workout.busy() ||
-    focused?.matches('input,textarea,select,[contenteditable]') || document.querySelector('.k-edit,dialog[open],details[open],.backdrop.on'))return true;
+  if(appUpdateBlocked())return true;
   const page=await fetch("index.html?t="+Date.now(),{cache:"no-store",credentials:"omit"});
-  if(page.ok && (await page.text()).includes(`name="secundus-release" content="${release.id}"`))location.reload();
+  if(page.ok && (await page.text()).includes(`name="secundus-release" content="${release.id}"`) && !appUpdateBlocked())location.reload();
   return true;
 },()=>!!store.pat && !!store.repo);
 window.addEventListener("storage", event => { if (event.key?.startsWith("secundus.sync:")) paintSync(); });
