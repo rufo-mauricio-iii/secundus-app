@@ -2,6 +2,25 @@
 const HealthData = (() => {
   const object = value => value && typeof value === "object" && !Array.isArray(value);
   const round = n => Math.round(n * 1e6) / 1e6;
+  // One request at a time, including focus/online events during a slow poll.
+  function autoRefresh({ refresh, enabled, interval = 30000, schedule = setTimeout, cancel = clearTimeout }) {
+    let timer, running = null, stopped = false, delay = interval;
+    function arm() {
+      if (!stopped) timer = schedule(wake, delay);
+    }
+    function wake() {
+      cancel(timer);
+      if (stopped) return Promise.resolve();
+      if (running) return running;
+      if (!enabled()) { arm(); return Promise.resolve(); }
+      running = Promise.resolve().then(refresh).then(ok => {
+        delay = ok === false ? Math.min(delay * 2, 300000) : interval;
+      }, () => { delay = Math.min(delay * 2, 300000); }).finally(() => { running = null; arm(); });
+      return running;
+    }
+    arm();
+    return { wake, stop() { stopped = true; cancel(timer); } };
+  }
   function weightDocument(value) {
     if (value == null) return { schema_version: 1, unit: "lbs", entries: [] };
     if (!object(value) || !Array.isArray(value.entries)) throw Error("Weight history is invalid. Reload before saving.");
@@ -143,6 +162,6 @@ const HealthData = (() => {
     return { ...docs, [paths.inventory]: inv, [paths.spend]: log,
       [paths.shopping]: shopping?.order_id === id ? { ...shopping, status: "undone", undone_at: date } : shopping };
   }
-  return { weightDocument, editWeight, transaction, convert, measure, subtractStock, purchaseQuantity, inventory, spending, orderDocuments, undoDocuments };
+  return { autoRefresh, weightDocument, editWeight, transaction, convert, measure, subtractStock, purchaseQuantity, inventory, spending, orderDocuments, undoDocuments };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = HealthData;

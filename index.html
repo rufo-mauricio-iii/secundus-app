@@ -230,6 +230,14 @@ const saveHealthFiles = HealthData.transaction({
     return res.json();
   },
 });
+function watchHealth(view, refresh) {
+  const poll = HealthData.autoRefresh({ refresh,
+    enabled: () => !document.hidden && navigator.onLine !== false && localStorage.getItem("secundus.view") === view });
+  document.addEventListener("visibilitychange", poll.wake);
+  window.addEventListener("focus", poll.wake);
+  window.addEventListener("online", poll.wake);
+  return poll;
+}
 
 /* ---- Obsidian DOM shim -------------------------------------------------
    The vault widgets are written against Obsidian's createDiv/createEl/empty/
@@ -2173,7 +2181,7 @@ const Weight = (() => {
       if (editing && wantFocus !== ".wt-goalin") wantFocus = ".wt-draftin";
       if (wantFocus) { const i = root.querySelector(wantFocus); wantFocus = false; if (i && document.activeElement !== i) { i.focus(); if (i.select) i.select(); } }
     }
-    const paintConnected = () => { if (root.isConnected) paint(); };
+    const paintConnected = () => { if (root.isConnected && !editing && !goalEditing) paint(); };
     views.push(paintConnected);
     paint();
     /* the SVG is sized to the host in pixels so labels keep their shape; redraw
@@ -2484,6 +2492,7 @@ const Workout = (() => {
     stopAllClocks();
     state.pos = Math.max(0, Math.min(model.steps.length - 1, pos));
     saveUI(); paintWorkspace();
+    setTimeout(applyUpdatedPlan, 0);
   }
   function initialDraft(step) {
     const saved = data.records.get(entryKey(DATE, week.days[active].key, step.canon)) || {};
@@ -2532,27 +2541,34 @@ const Workout = (() => {
   }
   function finish(parent) {
     const day = week.days[active], key = sessionKey(DATE, day.key), counts = stats();
-    el(parent, "h2", "uw-title", data.sessions[key] ? "Session complete" : "How did it go?");
+    const heading = el(parent, "h2", "uw-title", data.sessions[key] ? "Session complete" : "How did it go?");
     el(parent, "p", "uw-small", `${counts.done} steps logged · ${counts.skipped} skipped · ${counts.total - counts.done - counts.skipped} unlogged`);
     const yoga = el(parent, "label", "uw-check");
     const tick = el(yoga, "input"); tick.type = "checkbox";
-    refreshLoadedHistory = () => { tick.checked = !!data.records.get(entryKey(DATE, day.key, "Yoga"))?.done; };
-    refreshLoadedHistory();
+    tick.checked = !!data.records.get(entryKey(DATE, day.key, "Yoga"))?.done;
     el(yoga, "span", null, "Yoga / mobility");
     tick.onchange = () => { try { queueSave(day.key, "Yoga", { done: tick.checked }); } catch (_) { tick.checked = !tick.checked; } };
     const label = el(parent, "label", "uw-field"); el(label, "span", null, "Session feedback");
     const feedback = el(label, "textarea"); feedback.value = data.notes[key] || "";
     feedback.placeholder = "What felt light, heavy, or uncomfortable?";
-    feedback.oninput = () => { writeNote(key, feedback.value).catch(() => announce("Feedback could not be saved. Keep this page open.")); };
+    let feedbackEdited = false;
+    feedback.oninput = () => { feedbackEdited = true; writeNote(key, feedback.value).catch(() => announce("Feedback could not be saved. Keep this page open.")); };
     feedback.onblur = () => flushSaves();
-    button(parent, data.sessions[key] ? "Undo session completion" : "Mark session complete", () => {
+    const completion = button(parent, data.sessions[key] ? "Undo session completion" : "Mark session complete", () => {
       const on = !data.sessions[key];
       try { enqueue(`session:${key}`, { kind: "session", path: SESSIONS_PATH, key, value: on }); }
       catch (_) { return; }
       if (on) data.sessions[key] = true; else delete data.sessions[key];
       paintWorkspace(); flushSaves();
     }, data.sessions[key] ? "" : "uw-primary");
-    if (data.sessions[key]) el(parent, "p", "uw-small", `Completed · ${formatDate(DATE)}`);
+    const completed = el(parent, "p", "uw-small", data.sessions[key] ? `Completed · ${formatDate(DATE)}` : "");
+    refreshLoadedHistory = () => {
+      tick.checked = !!data.records.get(entryKey(DATE, day.key, "Yoga"))?.done;
+      heading.textContent = data.sessions[key] ? "Session complete" : "How did it go?";
+      completion.textContent = data.sessions[key] ? "Undo session completion" : "Mark session complete";
+      completed.textContent = data.sessions[key] ? `Completed · ${formatDate(DATE)}` : "";
+      if (!feedbackEdited && document.activeElement !== feedback) feedback.value = data.notes[key] || "";
+    };
     el(parent, "p", "uw-small", "You can finish early. Skipped and unlogged movements keep their status.");
     button(parent, "Return to session", () => { const index = model.steps.findIndex(s => s.block.kind !== "end" && stepMark(s) !== "done"); go(index < 0 ? 0 : index); });
   }
@@ -2634,6 +2650,7 @@ const Workout = (() => {
         clearInterval(interval); timerHost.textContent = ""; done.disabled = false; skip.disabled = false;
         if (holdButton) holdButton.disabled = false;
         if (activeClock === stop) activeClock = null;
+        setTimeout(applyUpdatedPlan, 0);
       };
       button(box, kind === "rest" ? "Skip rest" : "Cancel timer", () => { stop(); if (kind === "rest") go(state.pos + 1); });
       activeClock = stop; done.disabled = true; skip.disabled = true; if (holdButton) holdButton.disabled = true;
@@ -2778,7 +2795,29 @@ const Workout = (() => {
     main = el(layout, "section", "uw-main"); main.setAttribute("aria-label", "Active workout movement");
     paintWorkspace();
   }
-  let resumeRequest = null, lifecycleNotice, previousDate = null, chosenPastDate = false;
+  let resumeRequest = null, lifecycleNotice, previousDate = null, chosenPastDate = false, pendingWeek = null;
+  function workspaceBusy() {
+    const focus = document.activeElement;
+    return activeClock || (focus && root.contains(focus) && /^(INPUT|TEXTAREA|SELECT)$/i.test(focus.tagName)) ||
+      dialog?.panel.open || weightDialog?.panel.open;
+  }
+  function applyUpdatedPlan() {
+    if (!pendingWeek || workspaceBusy()) return;
+    if (!saveUI()) return;
+    const previous = ui, step = model?.steps[state?.pos];
+    week = pendingWeek; pendingWeek = null; WW = week.working_weights || {}; readWorkspace();
+    for (const [key, value] of Object.entries(previous)) {
+      ui[key] ||= { pos: 0, marks: {}, holds: {}, drafts: {} };
+      ui[key].drafts = { ...(ui[key].drafts || {}), ...(value.drafts || {}) };
+    }
+    active = Math.min(active, week.days.length - 1);
+    render();
+    if (step && model?.steps && state && host.contains(main)) {
+      const pos = model.steps.findIndex(s => s.canon === step.canon && s.round === step.round && s.block.kind === step.block.kind);
+      if (pos >= 0) { state.pos = pos; paintWorkspace(); }
+    }
+    saveUI(); paintLifecycle(); announce("Workout updated automatically; your drafts were retained.");
+  }
   function readWorkspace() {
     try { ui = JSON.parse(localStorage.getItem(uiKey()) || "{}"); if (!ui || typeof ui !== "object") ui = {}; } catch (_) { ui = {}; }
   }
@@ -2789,6 +2828,7 @@ const Workout = (() => {
       el(lifecycleNotice, "p", "uw-small", message);
       button(lifecycleNotice, "Retry refreshing workout", resume);
     }
+    if (pendingWeek) el(lifecycleNotice, "p", "uw-small", "Plan update ready; it will apply after your timer or current edit finishes.");
     if (chosenPastDate) {
       el(lifecycleNotice, "p", "uw-small", `Resuming your ${formatDate(DATE)} session. Logs keep that date.`);
       button(lifecycleNotice, "Return to today", () => { if (selectDate(todayISO())) void resume(); });
@@ -2813,27 +2853,19 @@ const Workout = (() => {
   async function resume() {
     if (!mounted || resumeRequest) return resumeRequest;
     void Weight.refresh?.();
-    if (!chosenPastDate && DATE !== todayISO() && !selectDate(todayISO())) return;
+    if (!chosenPastDate && DATE !== todayISO()) {
+      if (workspaceBusy() || !selectDate(todayISO())) return;
+    }
     resumeRequest = (async () => {
       try {
         await data.loadCore();
-        if (JSON.stringify(week) !== JSON.stringify(data.week)) {
-          if (!saveUI()) return;
-          const previous = ui;
-          week = data.week; WW = week.working_weights || {}; readWorkspace();
-          // Keep typed loads/reps for matching movements; changed prescriptions
-          // must not inherit completion marks from a different plan revision.
-          for (const [key, value] of Object.entries(previous)) {
-            ui[key] ||= { pos: 0, marks: {}, holds: {}, drafts: {} };
-            ui[key].drafts = { ...(value.drafts || {}), ...(ui[key].drafts || {}) };
-          }
-          active = Math.min(active, week.days.length - 1);
-          render(); saveUI(); announce("Workout plan refreshed; your drafts were retained.");
-        }
+        pendingWeek = JSON.stringify(week) !== JSON.stringify(data.week) ? data.week : null;
+        applyUpdatedPlan();
         paintLifecycle();
         void refreshHistory();
-        void flushSaves();
-      } catch (error) { paintLifecycle(`Could not refresh the plan: ${error.message}. The last loaded plan is still shown.`); }
+        await flushSaves();
+        return !data.historyWarning;
+      } catch (error) { paintLifecycle(`Could not refresh the plan: ${error.message}. Retrying automatically.`); return false; }
     })().finally(() => { resumeRequest = null; });
     return resumeRequest;
   }
@@ -2893,12 +2925,8 @@ const Workout = (() => {
     dialog = makeDialog("Workout detail"); dialogBody = dialog.body; weightDialog = makeDialog("Bodyweight", true);
     render();
     paintLifecycle();
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden && localStorage.getItem("secundus.view") === "workout") void resume();
-    });
-    window.addEventListener("focus", () => {
-      if (localStorage.getItem("secundus.view") === "workout") void resume();
-    });
+    watchHealth("workout", resume);
+    root.addEventListener("focusout", () => setTimeout(applyUpdatedPlan, 500));
     void refreshHistory();
   }
 
@@ -2923,9 +2951,7 @@ const Food = (() => {
     const f = await readFile(path);
     return f ? f.data : fallback;
   }
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && mounted && localStorage.getItem("secundus.view") === "diet") void refreshFood();
-  });
+  let foodPoll = null;
 
   async function mount(container) {
     if (!container) return;
@@ -2947,6 +2973,7 @@ const Food = (() => {
         cleanupFood(); container.empty();
         run(container, { data, mealsDb, ingDb, invDb: inventory, packDb, spendLog: spending });
         mounted = true;
+        foodPoll ||= watchHealth("diet", () => refreshFood());
       } catch (error) {
         container.empty();
         const box = container.createDiv({ cls: "food" });
@@ -2959,14 +2986,16 @@ const Food = (() => {
 
   /* ---- the ported widget (body kept as close to Food.md as possible) ---- */
   function run(root, db) {
-    const { data, mealsDb, ingDb, packDb } = db;
+    let { data, mealsDb, ingDb, packDb } = db;
     let invDb = db.invDb;
 
     function todayISO() {
       const d = new Date(), p = n => String(n).padStart(2, "0");
       return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
     }
-    let RECIPES, INVENTORY, LOWSTOCK;
+    let INVENTORY, LOWSTOCK;
+    function recipesFrom(mealsDb, ingDb) {
+    let RECIPES;
     if (mealsDb && Array.isArray(mealsDb.meals) && mealsDb.meals.length && ingDb && Array.isArray(ingDb.ingredients)) {
       const ingById = new Map(ingDb.ingredients.map(i => [i.id, i]));
       const vendorOf = (src) => {
@@ -3012,13 +3041,15 @@ const Food = (() => {
         };
       });
     } else {
-      root.createDiv({ text: "⚠️ No data: need orgs/health/data/meals.json + ingredients.json." });
-      return;
+      throw Error("Kitchen recipes or ingredients are invalid");
     }
+    return RECIPES;
+    }
+    let RECIPES = recipesFrom(mealsDb, ingDb);
 
-    const ID_BY_NAME = new Map((ingDb.ingredients || []).map(g => [g.name, g.id]));
-    const ING_BY_ID  = new Map((ingDb.ingredients || []).map(g => [g.id, g]));
-    const PACK_BY_ID = new Map(((packDb && packDb.packs) || []).map(p => [p.ingredient_id, p]));
+    let ID_BY_NAME = new Map((ingDb.ingredients || []).map(g => [g.name, g.id]));
+    let ING_BY_ID  = new Map((ingDb.ingredients || []).map(g => [g.id, g]));
+    let PACK_BY_ID = new Map(((packDb && packDb.packs) || []).map(p => [p.ingredient_id, p]));
     function refreshInventory() {
       INVENTORY = {}; LOWSTOCK = new Set();
       for (const stock of invDb.stock) {
@@ -3093,7 +3124,7 @@ const Food = (() => {
     const ORDER_KEY = `secundus.food.order:${store.repo}`;
     const paths = { shopping: EXPORT_PATH, inventory: INV_PATH, spend: SPEND_PATH };
     const orderPaths = Object.values(paths);
-    let pendingOrder = null, orderBusy = false, inventoryEpoch = 0, refreshRequest = null;
+    let pendingOrder = null, orderBusy = false, inventoryEpoch = 0, refreshRequest = null, stagedKitchen = null;
     try {
       pendingOrder = JSON.parse(localStorage.getItem(ORDER_KEY) || "null");
       if (pendingOrder && (!pendingOrder.id || (pendingOrder.kind !== "undo" && (!Array.isArray(pendingOrder.purchases) || !pendingOrder.payload || !pendingOrder.spend)))) throw Error("Invalid pending order");
@@ -3109,8 +3140,8 @@ const Food = (() => {
       return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
     }
 
-    const TARGETS = (data && data.targets) || { cal_day: 1600, protein_day: 130, protein_day_range: [130,150], main_meals_per_day: 1 };
-const PROTEIN_RANGE = TARGETS.protein_day_range || [130,150];
+    let TARGETS = (data && data.targets) || { cal_day: 1600, protein_day: 130, protein_day_range: [130,150], main_meals_per_day: 1 };
+let PROTEIN_RANGE = TARGETS.protein_day_range || [130,150];
 let breakfastId = localStorage.getItem("secundus-food-breakfast") || "";
 function breakfastSelector(host) {
   const row = host.createDiv({ cls: "psub" });
@@ -3131,7 +3162,7 @@ function dailyRemaining(main) {
     protein: Math.max(0, PROTEIN_RANGE[0] - b.p - main.p),
     incomplete: b.incomplete || main.incomplete, conditional: b.conditional || main.conditional };
 }
-    const byId = new Map(RECIPES.map(r => [r.id, r]));
+    let byId = new Map(RECIPES.map(r => [r.id, r]));
     const maxSrv = r => r.maxBatch || 12;
 
     const filt = { q: "", meal: null, cuisine: new Set(), type: new Set(), maxCost: null, minProtein: null, maxCal: null, inPlan: false, pantry: false };
@@ -3393,8 +3424,12 @@ const planWarnings = [];
     const hl = hdr.createDiv();
     hl.createDiv({ cls: "brand serif", text: "Diet" });
     const hrEl = hdr.createDiv({ cls: "hr" });
+    function renderTargets() {
+    hrEl.empty();
     hrEl.createDiv({ cls: "targetline", text: `${PROTEIN_RANGE.join("–")}g protein / day · breakfast + one main meal + snacks` });
     breakfastSelector(hrEl);
+    }
+    renderTargets();
 
     Weight.mount(wrap.createDiv({ cls: "wmount" }), { chartH: 150 });
 
@@ -3422,6 +3457,7 @@ const planWarnings = [];
       modalId = null;
       backdrop.removeClass("on");
       if (modalReturnFocus) { try { modalReturnFocus.focus(); } catch (e) {} modalReturnFocus = null; }
+      setTimeout(applyKitchenUpdate, 0);
     }
     function openBackdrop() {
       /* openModal re-runs when you switch recipe version, so only the first
@@ -3448,9 +3484,9 @@ const planWarnings = [];
     document.addEventListener("keydown", onEscape);
     cleanupFood = () => document.removeEventListener("keydown", onEscape);
 
-    const ALL_CUISINES = [...new Set(RECIPES.flatMap(cuisineTags))].sort();
-    const ALL_MEALS = MEAL_ORDER.filter(m => RECIPES.some(r => mealLabel(r) === m));
-    const ALL_TYPES = TYPE_ORDER.filter(t => RECIPES.some(r => typeTags(r).includes(t)));
+    let ALL_CUISINES = [...new Set(RECIPES.flatMap(cuisineTags))].sort();
+    let ALL_MEALS = MEAL_ORDER.filter(m => RECIPES.some(r => mealLabel(r) === m));
+    let ALL_TYPES = TYPE_ORDER.filter(t => RECIPES.some(r => typeTags(r).includes(t)));
 
     let filteredCache = [];
     function renderContent() { filteredCache = filtered(); renderLibrary(); }
@@ -4129,7 +4165,7 @@ const planWarnings = [];
           used.disabled = orderBusy || Boolean(pendingOrder);
           used.onclick = async () => {
             if (orderBusy || pendingOrder) return;
-            used.disabled = true; orderBusy = true; inventoryEpoch++;
+            used.disabled = true; orderBusy = true; inventoryEpoch++; stagedKitchen = null;
             try {
               invDb = await saveJSON(INV_PATH, (current, info) => {
                 const next = HealthData.inventory(info.exists ? current : null);
@@ -4225,7 +4261,7 @@ const planWarnings = [];
 
     async function commitPendingOrder() {
       if (!pendingOrder || orderBusy) return;
-      orderBusy = true; inventoryEpoch++;
+      orderBusy = true; inventoryEpoch++; stagedKitchen = null;
       const order = pendingOrder;
       const undoing = order.kind === "undo";
       orderStatus.textContent = undoing ? "Undoing order…" : "Saving order…"; renderShop(); renderSpend();
@@ -4288,38 +4324,82 @@ const planWarnings = [];
     renderShop();
     renderRail();
     renderSpend();
+    function applyKitchenUpdate() {
+      if (!stagedKitchen || orderBusy || pendingOrder) return;
+      const focused = document.activeElement;
+      // Keep the live recipe editor, including invalid or not-yet-blurred input.
+      // Weight and request editors are never rebuilt by kitchen refreshes.
+      if (modalId || (focused && /^(INPUT|TEXTAREA|SELECT)$/i.test(focused.tagName) &&
+          (filtersEl.contains(focused) || hrEl.contains(focused))) || filtersEl.querySelector(".fmenu.on")) return;
+      const next = stagedKitchen;
+      if (next.epoch !== inventoryEpoch) { stagedKitchen = null; return; }
+      const catalogChanged = JSON.stringify([data, mealsDb, ingDb, packDb]) !== JSON.stringify([next.policy, next.meals, next.ingredients, next.packs]);
+      if (catalogChanged) {
+        const recipes = recipesFrom(next.meals, next.ingredients);
+        const nextById = new Map(recipes.map(r => [r.id, r]));
+        // A removed recipe or version cannot silently erase a selected meal.
+        // Retain that selection's loaded recipe until the user removes it.
+        for (const [id, entry] of plan) {
+          const recipe = nextById.get(id), old = byId.get(id);
+          const missingVersion = entry.ver && !recipe?.versions.some(v => v.id === entry.ver && !v.needs_review);
+          const selectedIngredients = recipe?.versions.find(v => v.id === entry.ver)?.ingredients || recipe?.ingredients;
+          const removedOverride = old && [...entry.qtys.keys()].some(name => !selectedIngredients?.some(i => i.name === name));
+          if (old && (!recipe || missingVersion || removedOverride)) {
+            const at = recipes.findIndex(r => r.id === id);
+            if (at >= 0) recipes[at] = old; else recipes.push(old);
+            nextById.set(id, old);
+            const warning = `${old.name}: keeping your selected recipe because its saved version or ingredients changed.`;
+            if (!planWarnings.includes(warning)) planWarnings.push(warning);
+          }
+        }
+        data = next.policy; mealsDb = next.meals; ingDb = next.ingredients; packDb = next.packs;
+        RECIPES = recipes; byId = nextById;
+        ID_BY_NAME = new Map(ingDb.ingredients.map(g => [g.name, g.id]));
+        ING_BY_ID = new Map(ingDb.ingredients.map(g => [g.id, g]));
+        PACK_BY_ID = new Map(packDb.packs.map(p => [p.ingredient_id, p]));
+        TARGETS = data.targets; PROTEIN_RANGE = TARGETS.protein_day_range || [130,150];
+        ALL_CUISINES = [...new Set(RECIPES.flatMap(cuisineTags))].sort();
+        ALL_MEALS = MEAL_ORDER.filter(m => RECIPES.some(r => mealLabel(r) === m));
+        ALL_TYPES = TYPE_ORDER.filter(t => RECIPES.some(r => typeTags(r).includes(t)));
+        renderTargets(); buildFilters();
+      }
+      stagedKitchen = null;
+      if (catalogChanged || JSON.stringify([invDb, spendLog]) !== JSON.stringify([next.inventory, next.spend]))
+        acceptDocuments({ [INV_PATH]: next.inventory, [SPEND_PATH]: next.spend });
+      orderStatus.textContent = "Kitchen is up to date. Changes sync automatically.";
+    }
+    root.addEventListener("focusout", () => setTimeout(applyKitchenUpdate, 500));
     refreshFood = () => {
       if (orderBusy) return Promise.resolve();
       if (refreshRequest) return refreshRequest;
       void Weight.refresh();
-      const epoch = inventoryEpoch;
       refreshRequest = (async () => {
         try {
+          if (pendingOrder) {
+            await commitPendingOrder();
+            if (pendingOrder) return false;
+          }
+          const readEpoch = inventoryEpoch;
           const [inventory, spend, policy, meals, ingredients, packs] = await Promise.all([
             readJSON(INV_PATH, null), readJSON(SPEND_PATH, []), readJSON(DATA_PATH, null),
             readJSON("orgs/health/data/meals.json", null), readJSON("orgs/health/data/ingredients.json", null),
             readJSON("orgs/health/data/packs.json", { packs: [] }),
           ]);
-          if (epoch !== inventoryEpoch) return;
-          acceptDocuments({ [INV_PATH]: inventory, [SPEND_PATH]: spend });
-          orderStatus.textContent = pendingOrder ? "An order is awaiting confirmation. Use the retry button in Shop." : "Kitchen stock and spending refreshed.";
-          if (JSON.stringify([policy, meals, ingredients, packs]) !== JSON.stringify([data, mealsDb, ingDb, packDb])) {
-            orderStatus.append(" Updated recipes or targets are available. Your meal selections will be retained. ");
-            const reload = orderStatus.createEl("button", { text: "Load updated recipes" });
-            reload.disabled = Boolean(pendingOrder);
-            reload.onclick = () => {
-              if (orderBusy || pendingOrder) return;
-              mounted = false; void mount(root);
-            };
-          }
+          if (readEpoch !== inventoryEpoch || orderBusy) return;
+          if (!policy?.targets || !Array.isArray(packs?.packs)) throw Error("Kitchen targets or packs are invalid");
+          recipesFrom(meals, ingredients); // Validate before replacing any live data.
+          stagedKitchen = { epoch: readEpoch, inventory: HealthData.inventory(inventory), spend: HealthData.spending(spend), policy, meals, ingredients, packs };
+          applyKitchenUpdate();
+          if (stagedKitchen) orderStatus.textContent = "Updates are ready and will apply after your current edit closes.";
+          return true;
         } catch (error) {
-          orderStatus.textContent = `Could not refresh the kitchen: ${error.message}. The last loaded data is still shown. `;
-          orderStatus.createEl("button", { text: "Retry kitchen refresh" }).onclick = refreshFood;
+          orderStatus.textContent = `Could not refresh the kitchen: ${error.message}. Your edits are retained; retrying automatically.`;
+          return false;
         }
       })().finally(() => { refreshRequest = null; });
       return refreshRequest;
     };
-    if (pendingOrder) orderStatus.textContent = "An order is awaiting confirmation. Use the retry button in Shop.";
+    if (pendingOrder) orderStatus.textContent = "An order is awaiting confirmation. It will retry automatically.";
   }
 
   return { mount };
