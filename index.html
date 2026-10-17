@@ -17,6 +17,7 @@
 <script src="workout-session.js"></script>
 <script src="workout-data.js"></script>
 <script src="workout-review.js"></script>
+<script src="health-data.js"></script>
 <script src="recipe-workflow.js?v=20260926-cards"></script>
 </head>
 <body>
@@ -110,8 +111,8 @@ function b64encode(text) {
   return btoa(bin);
 }
 /* read one file -> { data (parsed json or raw), sha } ; null if 404 */
-async function readFile(path) {
-  const res = await gh(`contents/${path}?t=${Date.now()}`);
+async function readFile(path, ref) {
+  const res = await gh(`contents/${path}?t=${Date.now()}${ref ? `&ref=${encodeURIComponent(ref)}` : ""}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GitHub ${res.status} reading ${path}`);
   const body = await res.json();
@@ -126,7 +127,7 @@ async function readFile(path) {
   }
   const raw = b64decode(encoded.content);
   let data; try { data = JSON.parse(raw); } catch { data = raw; }
-  shaMap.set(path, body.sha);   // priming the sha here is what lets writes skip a read
+  if (!ref) shaMap.set(path, body.sha);   // Pinned snapshots must not replace the current SHA.
   return { data, sha: body.sha, raw };
 }
 /* list a directory -> [{name, path, sha}] ; [] if 404 */
@@ -194,7 +195,7 @@ async function saveJSON(path, mutate, message) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     const cur = await readFile(path);
     const data = cur ? cur.data : {};
-    const next = mutate(structuredClone(data));
+    const next = mutate(structuredClone(data), { exists: Boolean(cur) });
     try {
       // One CAS attempt only. A conflict must rerun mutate against fresh data;
       // writeRaw's internal retry would send the old payload with a new SHA.
@@ -221,6 +222,14 @@ async function imageURL(path) {
   imgCache.set(path, url);
   return url;
 }
+const saveHealthFiles = HealthData.transaction({
+  readFile,
+  async request(path, method = "GET", body) {
+    const res = await gh(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+    if (!res.ok) throw Object.assign(new Error(`GitHub ${res.status} saving health data`), { status: res.status });
+    return res.json();
+  },
+});
 
 /* ---- Obsidian DOM shim -------------------------------------------------
    The vault widgets are written against Obsidian's createDiv/createEl/empty/
@@ -1773,7 +1782,7 @@ const Weight = (() => {
   const fmtDay = fmtShort, fmtLong = fmtShort;
   const sign = v => (v > 0 ? "+" : "−") + Math.abs(v).toFixed(1);
 
-  let doc = null, loading = null;
+  let doc = null, loading = null, refreshError = "";
   const views = [];
 
   const rows = () => (doc && Array.isArray(doc.entries) ? doc.entries : [])
@@ -1900,71 +1909,75 @@ const Weight = (() => {
   }
 
   /* ---- storage ---- */
-  const readPending = () => { try { return JSON.parse(localStorage.getItem(PEND_KEY) || "null"); } catch (_) { return null; } };
-  const writePending = p => { try { p ? localStorage.setItem(PEND_KEY, JSON.stringify(p)) : localStorage.removeItem(PEND_KEY); } catch (_) {} };
-
-  function upsert(date, lbs) {
-    const arr = doc.entries;
-    const i = arr.findIndex(e => e && e.date === date);
-    if (i >= 0) arr[i].lbs = lbs; else arr.push({ date, lbs });
-    arr.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  let outbox = null, weightRetryTimer = null;
+  const readPending = () => outbox?.pending.size > 0;
+  function overlayPending(value) {
+    for (const change of outbox.pending.values()) value = HealthData.editWeight(value, change);
+    return value;
   }
-  async function push(msg) {
-    doc.updated = todayISO();
-    await writeRaw(PATH, JSON.stringify(doc, null, 2) + "\n", msg);
-  }
-  /* A failed write must not look like a saved one. The value is held on the
-     device, the card says "not synced", and the next mount retries. */
-  async function save(date, lbs) {
-    upsert(date, lbs); render();
+  function ensureOutbox() {
+    if (outbox) return outbox;
+    const repo = store.repo;
+    outbox = createWorkoutOutbox(localStorage, `secundus.weight.outbox:${repo}`, async change => {
+      if (repo !== store.repo) throw Error("Reconnect the original repository to sync weight");
+      return saveJSON(PATH, (current, info) => HealthData.editWeight(info.exists ? current : null, change),
+        `weight: ${change.kind} ${change.date || change.lbs} [site]`);
+    }, (change, saved) => {
+      doc = overlayPending(saved); render();
+      appendActionLog(change.kind === "delete" ? "DELETED" : "WROTE", PATH, `${change.kind} ${change.date || change.lbs}`);
+    }, () => { render(); });
+    // Upgrade the old single pending reading only after the new queue is durable.
     try {
-      await push(`weight: log ${lbs} lbs ${date} [site]`);
-      writePending(null);
-      appendActionLog("WROTE", PATH, `${lbs} lbs ${date}`);
-    } catch (e) {
-      writePending({ date, lbs });
-      toast("Saved on this device — not synced yet");
-    }
-    render();
+      const legacy = JSON.parse(localStorage.getItem(PEND_KEY) || "null");
+      if (legacy) {
+        if (typeof legacy.date !== "string" || !Number.isFinite(legacy.lbs)) throw Error("Pending weight is invalid; keep this device's data for recovery.");
+        if (!outbox.pending.has(legacy.date)) outbox.enqueue(legacy.date, { kind: "reading", ...legacy, updated: todayISO() });
+        localStorage.removeItem(PEND_KEY);
+      }
+    } catch (error) { outbox = null; throw error; }
+    window.addEventListener("online", () => { void flushPending(); void refresh(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) { render(); void flushPending(); void refresh(); } });
+    return outbox;
   }
-  async function remove(date) {
-    doc.entries = doc.entries.filter(e => !(e && e.date === date)); render();
-    try {
-      await push(`weight: remove ${date} [site]`);
-      appendActionLog("DELETED", PATH, date);
-    } catch (e) { toast("Delete did not reach the repo"); }
-    render();
+  async function queue(change) {
+    if (!doc) { toast("Weight history has not loaded. Retry loading before saving."); return false; }
+    try { ensureOutbox().enqueue(change.date || "target", { ...change, updated: todayISO() }); }
+    catch (_) { toast("Device storage failed — weight change was NOT saved. Keep this page open."); return false; }
+    doc = overlayPending(doc); render();
+    await flushPending();
+    return true;
   }
-  async function setTarget(lbs) {
-    doc.target_lbs = lbs; render();
-    try {
-      await push(`weight: goal ${lbs} lbs [site]`);
-      appendActionLog("WROTE", PATH, `goal ${lbs} lbs`);
-    } catch (e) { toast("Goal did not reach the repo"); }
-    render();
-  }
+  const save = (date, lbs) => queue({ kind: "reading", date, lbs });
+  const remove = date => queue({ kind: "delete", date });
+  const setTarget = lbs => queue({ kind: "target", lbs });
   async function flushPending() {
-    const p = readPending();
-    if (!p || !doc) return;
-    upsert(p.date, p.lbs);
-    try {
-      await push(`weight: log ${p.lbs} lbs ${p.date} [site, retried]`);
-      writePending(null);
-      appendActionLog("WROTE", PATH, `${p.lbs} lbs ${p.date} (retried)`);
-    } catch (e) { /* stays pending; the card keeps saying so */ }
+    if (!doc || !outbox) return;
+    if (weightRetryTimer) clearTimeout(weightRetryTimer);
+    weightRetryTimer = null;
+    await outbox.flush();
+    if (outbox.pending.size && !weightRetryTimer) weightRetryTimer = setTimeout(flushPending, 30000);
+    render();
   }
-  async function load() {
-    if (doc) return doc;
+  async function load(force = false) {
+    if (doc && !force) return doc;
     if (loading) return loading;
+    const before = doc;
     loading = (async () => {
-      let f = null;
-      try { f = await readFile(PATH); } catch (e) { f = null; }
-      doc = (f && f.data && typeof f.data === "object" && Array.isArray(f.data.entries))
-        ? f.data : { schema_version: 1, unit: "lbs", entries: [] };
-      await flushPending();
+      const f = await readFile(PATH);
+      const loaded = HealthData.weightDocument(f ? f.data : null);
+      ensureOutbox();
+      // A save completed during the fetch is newer than this snapshot.
+      if (doc === before) doc = overlayPending(loaded);
+      refreshError = "";
+      void flushPending();
       return doc;
-    })();
+    })().finally(() => { loading = null; });
     return loading;
+  }
+  async function refresh() {
+    if (!doc) return;
+    try { await load(true); } catch (error) { refreshError = `Could not refresh weight: ${error.message}`; }
+    render();
   }
 
   /* W · M · 6M · Y, as days; 0 would mean "all" but the design has no such stop */
@@ -2014,7 +2027,7 @@ const Weight = (() => {
     rGoal.r.classList.add("wt-row-btn"); rGoal.r.setAttribute("role", "button"); rGoal.r.tabIndex = 0;
     rGoal.r.title = "Change the goal";
 
-    const TODAY = todayISO();
+    let TODAY = todayISO();
     let cursor = TODAY, win = getWin();
     let editing = false, draft = 0, err = "", confirmVal = null, wantFocus = false, goalEditing = false;
 
@@ -2024,7 +2037,7 @@ const Weight = (() => {
       editing = true; draft = on ? on.lbs : (near ? near.lbs : 200); err = ""; confirmVal = null; paint();
     }
     function cancelEdit() { editing = false; err = ""; confirmVal = null; paint(); }
-    function commit(force) {
+    async function commit(force) {
       const es = rows();
       const v = Math.round(parseFloat(draft) * 10) / 10;
       if (!isFinite(v)) { err = "Enter a number, e.g. 204.1"; confirmVal = null; paint(); return; }
@@ -2036,10 +2049,12 @@ const Weight = (() => {
       const ref = others.length ? headline(others, T(cursor)) : null;
       if (!force && ref != null && Math.abs(v - ref) > DEV_LBS) { confirmVal = v; err = ""; paint(); return; }
       editing = false; err = ""; confirmVal = null;
-      save(cursor, v);
+      if (!await save(cursor, v)) { editing = true; err = "This reading was not saved. Keep this page open and retry."; paint(); }
     }
 
     function paint() {
+      const nextToday = todayISO();
+      if (nextToday !== TODAY) { if (cursor === TODAY && !editing) cursor = nextToday; TODAY = nextToday; }
       const es = rows(), cT = T(cursor), tgt = target(), last = es[es.length - 1] || null;
       const view = es.filter(e => T(TODAY) - e.t <= win * DAY);
       const f = canFit(view) ? fit(view) : null;
@@ -2118,7 +2133,14 @@ const Weight = (() => {
         b.onclick = beginEdit;
         if (!isToday) { const back = el(body, "button", "wt-del", "Back to today"); back.type = "button";
           back.onclick = () => { cursor = TODAY; paint(); }; }
-        if (pend) el(msg, "div", "wt-err", "Saved on this device — not synced yet");
+        if (pend) {
+          el(msg, "div", "wt-err", "Saved on this device — not synced yet");
+          const retry = el(msg, "button", "wt-btn", "Retry weight sync"); retry.type = "button"; retry.onclick = flushPending;
+        }
+        if (refreshError) {
+          el(msg, "div", "wt-err", refreshError);
+          el(msg, "button", "wt-btn", "Refresh weight history").onclick = refresh;
+        }
       }
 
       /* goal list */
@@ -2151,7 +2173,8 @@ const Weight = (() => {
       if (editing && wantFocus !== ".wt-goalin") wantFocus = ".wt-draftin";
       if (wantFocus) { const i = root.querySelector(wantFocus); wantFocus = false; if (i && document.activeElement !== i) { i.focus(); if (i.select) i.select(); } }
     }
-    views.push(paint);
+    const paintConnected = () => { if (root.isConnected) paint(); };
+    views.push(paintConnected);
     paint();
     /* the SVG is sized to the host in pixels so labels keep their shape; redraw
        when the card changes width (first layout, rotate, resize) */
@@ -2164,7 +2187,15 @@ const Weight = (() => {
 
   async function mount(host, opts) {
     if (!host) return;
-    try { await load(); } catch (e) { return; }   /* never block the host view */
+    try { await load(); }
+    catch (e) {
+      host.textContent = "";
+      el(host, "p", "wt-err", `Could not load weight history: ${e.message}`);
+      const retry = el(host, "button", "wt-btn", "Retry weight history");
+      retry.onclick = () => mount(host, opts);
+      return;
+    }
+    host.textContent = "";
     build(host, (opts && opts.chartH) || 220);
   }
   /* the one-line read the Workout Focus sidebar shows: last reading, weekly
@@ -2182,7 +2213,7 @@ const Weight = (() => {
   }
   /* repaint hook for anything that shows summary() — fires after every save */
   const onChange = fn => views.push(fn);
-  return { mount, summary, onChange };
+  return { mount, summary, onChange, refresh };
 })();
 
 /* ====================================================================
@@ -2314,6 +2345,10 @@ const Workout = (() => {
     return outbox;
   }
   function enqueue(id, value) {
+    if (!chosenPastDate && DATE !== todayISO()) {
+      void resume();
+      throw Error("The date changed. Review today's session before logging.");
+    }
     try { ensureOutbox().enqueue(id, value); }
     catch (e) { toast("Device storage failed — this change is NOT saved. Keep this page open."); throw e; }
     if (saveTimer) clearTimeout(saveTimer);
@@ -2383,7 +2418,7 @@ const Workout = (() => {
   const uiKey = () => `wkt-workspace:${store.repo}:${DATE}:${week.week_start}${week.revision ? ":" + week.revision : ""}`;
   const stateKey = () => `${week.days[active].key}|${WorkoutSession.sessionFor(week, week.days[active].key, DATE)?.date || gear}`;
   function saveUI() {
-    try { localStorage.setItem(uiKey(), JSON.stringify(ui)); return true; }
+    try { localStorage.setItem(uiKey(), JSON.stringify(ui)); localStorage.setItem(`wkt-last-date:${store.repo}`, DATE); return true; }
     catch (_) { announce("Device storage failed. Keep this page open; progress could not be saved."); return false; }
   }
   function announce(message) { if (statusEl) statusEl.textContent = message; }
@@ -2743,8 +2778,68 @@ const Workout = (() => {
     main = el(layout, "section", "uw-main"); main.setAttribute("aria-label", "Active workout movement");
     paintWorkspace();
   }
+  let resumeRequest = null, lifecycleNotice, previousDate = null, chosenPastDate = false;
+  function readWorkspace() {
+    try { ui = JSON.parse(localStorage.getItem(uiKey()) || "{}"); if (!ui || typeof ui !== "object") ui = {}; } catch (_) { ui = {}; }
+  }
+  function paintLifecycle(message = "") {
+    if (!lifecycleNotice) return;
+    lifecycleNotice.textContent = "";
+    if (message) {
+      el(lifecycleNotice, "p", "uw-small", message);
+      button(lifecycleNotice, "Retry refreshing workout", resume);
+    }
+    if (chosenPastDate) {
+      el(lifecycleNotice, "p", "uw-small", `Resuming your ${formatDate(DATE)} session. Logs keep that date.`);
+      button(lifecycleNotice, "Return to today", () => { if (selectDate(todayISO())) void resume(); });
+    } else if (previousDate && previousDate < DATE) {
+      el(lifecycleNotice, "p", "uw-small", "Today's session is open. Your previous draft is still saved.");
+      button(lifecycleNotice, `Resume ${formatDate(previousDate)} draft`, () => selectDate(previousDate));
+    }
+  }
+  function selectDate(date) {
+    if (!saveUI()) return false;
+    const oldDate = DATE;
+    stopAllClocks(); DATE = date; chosenPastDate = DATE !== todayISO();
+    if (!chosenPastDate) {
+      previousDate = oldDate;
+      try { localStorage.setItem(`wkt-previous-date:${store.repo}`, previousDate); } catch (_) {}
+    }
+    readWorkspace();
+    active = Math.min((new Date(DATE + "T12:00:00").getDay() + 6) % 7, week.days.length - 1);
+    render(); paintLifecycle();
+    return true;
+  }
+  async function resume() {
+    if (!mounted || resumeRequest) return resumeRequest;
+    void Weight.refresh?.();
+    if (!chosenPastDate && DATE !== todayISO() && !selectDate(todayISO())) return;
+    resumeRequest = (async () => {
+      try {
+        await data.loadCore();
+        if (JSON.stringify(week) !== JSON.stringify(data.week)) {
+          if (!saveUI()) return;
+          const previous = ui;
+          week = data.week; WW = week.working_weights || {}; readWorkspace();
+          // Keep typed loads/reps for matching movements; changed prescriptions
+          // must not inherit completion marks from a different plan revision.
+          for (const [key, value] of Object.entries(previous)) {
+            ui[key] ||= { pos: 0, marks: {}, holds: {}, drafts: {} };
+            ui[key].drafts = { ...(value.drafts || {}), ...(ui[key].drafts || {}) };
+          }
+          active = Math.min(active, week.days.length - 1);
+          render(); saveUI(); announce("Workout plan refreshed; your drafts were retained.");
+        }
+        paintLifecycle();
+        void refreshHistory();
+        void flushSaves();
+      } catch (error) { paintLifecycle(`Could not refresh the plan: ${error.message}. The last loaded plan is still shown.`); }
+    })().finally(() => { resumeRequest = null; });
+    return resumeRequest;
+  }
   async function mount(container) {
-    if (mounted || mounting || !container) return;
+    if (!container || mounting) return;
+    if (mounted) return resume();
     mounting = true;
     container.textContent = ""; root = el(container, "div", "wkt");
     const loading = el(root, "p", "uw-small", "Loading week from repo…");
@@ -2756,7 +2851,11 @@ const Workout = (() => {
       return;
     } finally { mounting = false; }
     mounted = true; root.textContent = "";
-    try { ui = JSON.parse(localStorage.getItem(uiKey()) || "{}"); if (!ui || typeof ui !== "object") ui = {}; } catch (_) { ui = {}; }
+    readWorkspace();
+    try {
+      const last = localStorage.getItem(`wkt-last-date:${store.repo}`);
+      previousDate = last && last < DATE ? last : localStorage.getItem(`wkt-previous-date:${store.repo}`);
+    } catch (_) {}
     // Preserve the old Focus position without treating earlier steps as completed.
     try {
       const previous = JSON.parse(localStorage.getItem("wkt-focus") || "null");
@@ -2787,11 +2886,19 @@ const Workout = (() => {
     planDatesEl = el(planEl, "div", "uw-plan-dates");
     button(planEl, "Full plan & notes", overview, "uw-quiet");
     historyNotice = el(root, "div", "uw-small"); historyNotice.setAttribute("role", "status");
+    lifecycleNotice = el(root, "div", "uw-small"); lifecycleNotice.setAttribute("role", "status");
     WorkoutReview.mount(el(root, "div"));
     host = el(root, "div");
     statusEl = el(root, "p", "uw-status uw-small"); statusEl.setAttribute("role", "status"); statusEl.setAttribute("aria-live", "polite");
     dialog = makeDialog("Workout detail"); dialogBody = dialog.body; weightDialog = makeDialog("Bodyweight", true);
     render();
+    paintLifecycle();
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && localStorage.getItem("secundus.view") === "workout") void resume();
+    });
+    window.addEventListener("focus", () => {
+      if (localStorage.getItem("secundus.view") === "workout") void resume();
+    });
     void refreshHistory();
   }
 
@@ -2805,7 +2912,7 @@ const Workout = (() => {
    rails; every write is a commit tagged [site].
    ==================================================================== */
 const Food = (() => {
-  let mounted = false;
+  let mounted = false, mounting = null, refreshFood = async () => {}, cleanupFood = () => {};
 
   const DATA_PATH   = "orgs/health/data/food-proto.json";
   const EXPORT_PATH = "orgs/health/data/shopping-list.json";
@@ -2813,45 +2920,52 @@ const Food = (() => {
   const INV_PATH    = "orgs/health/data/inventory.json";
 
   async function readJSON(path, fallback) {
-    try {
-      const f = await readFile(path);
-      return f ? f.data : fallback;
-    } catch (e) { console.warn("[food] read failed", path, e); return fallback; }
+    const f = await readFile(path);
+    return f ? f.data : fallback;
   }
-  const writeJSON = (path, obj, msg) => writeRaw(path, JSON.stringify(obj, null, 2) + "\n", msg);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && mounted && localStorage.getItem("secundus.view") === "diet") void refreshFood();
+  });
 
   async function mount(container) {
-    if (mounted || !container) return;
-    container.empty();
-    const boot = container.createDiv({ cls: "food" });
-    const loading = boot.createDiv({ text: "Loading kitchen from repo…" });
-    loading.style.cssText = "font-family:var(--mono);font-size:var(--fs-dense);color:var(--faint);padding:14px 0";
-
-    const data    = await readJSON(DATA_PATH, null);
-    const mealsDb = await readJSON("orgs/health/data/meals.json", null);
-    const ingDb   = await readJSON("orgs/health/data/ingredients.json", null);
-    const invDb   = await readJSON(INV_PATH, null);
-    const packDb  = await readJSON("orgs/health/data/packs.json", null);
-
-    container.empty();
-    const root = container;
-    mounted = true;
-    run(root, { data, mealsDb, ingDb, invDb, packDb });
+    if (!container) return;
+    if (mounting) return mounting;
+    if (mounted) return refreshFood();
+    mounting = (async () => {
+      container.empty();
+      const boot = container.createDiv({ cls: "food" });
+      boot.createDiv({ text: "Loading kitchen from repo…" }).setAttribute("role", "status");
+      try {
+        const [data, mealsDb, ingDb, invDb, packDb, spendLog] = await Promise.all([
+          readJSON(DATA_PATH, null), readJSON("orgs/health/data/meals.json", null),
+          readJSON("orgs/health/data/ingredients.json", null), readJSON(INV_PATH, null),
+          readJSON("orgs/health/data/packs.json", { packs: [] }), readJSON(SPEND_PATH, []),
+        ]);
+        if (!data?.targets || !Array.isArray(mealsDb?.meals) || !mealsDb.meals.length || !Array.isArray(ingDb?.ingredients) || !Array.isArray(packDb?.packs))
+          throw Error("Kitchen data is missing or invalid");
+        const inventory = HealthData.inventory(invDb), spending = HealthData.spending(spendLog);
+        cleanupFood(); container.empty();
+        run(container, { data, mealsDb, ingDb, invDb: inventory, packDb, spendLog: spending });
+        mounted = true;
+      } catch (error) {
+        container.empty();
+        const box = container.createDiv({ cls: "food" });
+        box.createDiv({ text: `Could not load kitchen: ${error.message}` }).setAttribute("role", "alert");
+        box.createEl("button", { text: "Retry loading kitchen" }).onclick = () => mount(container);
+      }
+    })().finally(() => { mounting = null; });
+    return mounting;
   }
 
   /* ---- the ported widget (body kept as close to Food.md as possible) ---- */
   function run(root, db) {
-    const { data, mealsDb, ingDb, invDb, packDb } = db;
+    const { data, mealsDb, ingDb, packDb } = db;
+    let invDb = db.invDb;
 
     function todayISO() {
       const d = new Date(), p = n => String(n).padStart(2, "0");
       return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
     }
-    async function writeInventory() {
-      invDb.last_updated = todayISO();
-      await writeJSON(INV_PATH, invDb, `food: inventory update ${todayISO()} [site]`);
-    }
-
     let RECIPES, INVENTORY, LOWSTOCK;
     if (mealsDb && Array.isArray(mealsDb.meals) && mealsDb.meals.length && ingDb && Array.isArray(ingDb.ingredients)) {
       const ingById = new Map(ingDb.ingredients.map(i => [i.id, i]));
@@ -2897,17 +3011,6 @@ const Food = (() => {
           steps: m.steps || (m.method ? [m.method] : [])
         };
       });
-      INVENTORY = {};
-      LOWSTOCK = new Set();
-      ((invDb && invDb.stock) || []).forEach(s => {
-        if (s.qty_on_hand > 0) {
-          const i = ingById.get(s.ingredient_id);
-          if (i) {
-            INVENTORY[i.name] = s.note || `${s.qty_on_hand} ${s.unit} on hand`;
-            if (s.min_qty != null && s.qty_on_hand <= s.min_qty) LOWSTOCK.add(i.name);
-          }
-        }
-      });
     } else {
       root.createDiv({ text: "⚠️ No data: need orgs/health/data/meals.json + ingredients.json." });
       return;
@@ -2916,6 +3019,17 @@ const Food = (() => {
     const ID_BY_NAME = new Map((ingDb.ingredients || []).map(g => [g.name, g.id]));
     const ING_BY_ID  = new Map((ingDb.ingredients || []).map(g => [g.id, g]));
     const PACK_BY_ID = new Map(((packDb && packDb.packs) || []).map(p => [p.ingredient_id, p]));
+    function refreshInventory() {
+      INVENTORY = {}; LOWSTOCK = new Set();
+      for (const stock of invDb.stock) {
+        const ingredient = ING_BY_ID.get(stock.ingredient_id);
+        if (!ingredient || !(stock.qty_on_hand > 0)) continue;
+        const text = `${stock.qty_on_hand} ${stock.unit} on hand`;
+        INVENTORY[ingredient.name] = [INVENTORY[ingredient.name], text].filter(Boolean).join("; ");
+        if (stock.min_qty != null && stock.qty_on_hand <= stock.min_qty) LOWSTOCK.add(ingredient.name);
+      }
+    }
+    refreshInventory();
 
     function needIn(item, want) {
       const a = item.amount;
@@ -2947,6 +3061,7 @@ const Food = (() => {
         const unit = row.pack_unit === "count" ? "" : " " + row.pack_unit;
         return {
           packs, need, basis: row.pack_basis, src: bridged ? "packs.json (bridged)" : "packs.json",
+          stockAmount: { qty: packs * perPack, unit: wantUnit === "count" ? "ct" : wantUnit },
           label: `${row.pack_qty}${unit}`,
           needText: item.amount ? fmtAmount(item.amount, 1) : unitPhrase(item.qty, item.unit),
           cost: row.pack_price_usd != null ? packs * row.pack_price_usd : null,
@@ -2961,6 +3076,7 @@ const Food = (() => {
       const packs = Math.max(1, Math.ceil(need / spp - 1e-9));
       return {
         packs, need, basis: "count", src: "servings_per_pack",
+        stockAmount: { qty: packs * spp, unit: item.unit || "unit" },
         label: g2.pack_size || `${spp} × ${g2.unit || "unit"}`,
         needText: item.amount ? fmtAmount(item.amount, 1) : unitPhrase(item.qty, item.unit),
         cost: g2.pack_price != null ? packs * g2.pack_price : null,
@@ -2974,7 +3090,18 @@ const Food = (() => {
     const costSummary = items => { const total=costTotal(items); return total == null ? `${money(items.reduce((sum,i)=>sum+(lineCost(i)||0),0))} known + unpriced items` : money(total); };
 
     let spendLog = Array.isArray(db.spendLog) ? db.spendLog : [];
-    readJSON(SPEND_PATH, []).then(s => { if (Array.isArray(s)) { spendLog = s; renderSpend(); } });
+    const ORDER_KEY = `secundus.food.order:${store.repo}`;
+    const paths = { shopping: EXPORT_PATH, inventory: INV_PATH, spend: SPEND_PATH };
+    const orderPaths = Object.values(paths);
+    let pendingOrder = null, orderBusy = false, inventoryEpoch = 0, refreshRequest = null;
+    try {
+      pendingOrder = JSON.parse(localStorage.getItem(ORDER_KEY) || "null");
+      if (pendingOrder && (!pendingOrder.id || (pendingOrder.kind !== "undo" && (!Array.isArray(pendingOrder.purchases) || !pendingOrder.payload || !pendingOrder.spend)))) throw Error("Invalid pending order");
+    } catch (_) { throw Error("The saved pending order could not be read. Keep this device's data for recovery."); }
+    function acceptDocuments(docs) {
+      invDb = HealthData.inventory(docs[INV_PATH]); spendLog = HealthData.spending(docs[SPEND_PATH]);
+      refreshInventory(); renderAfterPlan(); renderSpend();
+    }
 
     function weekStartISO(d) {
       const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
@@ -3017,7 +3144,7 @@ const planWarnings = [];
       try { localStorage.setItem(PLAN_KEY, JSON.stringify({
         plan: [...plan].map(([id, e]) => [id, { servings: e.servings, ver: e.ver || null, qtys: [...(e.qtys || new Map())] }]),
         skips: [...skipSet], vendors: [...vendorPick]
-      })); } catch (e) {}
+      })); } catch (e) { toast("Device storage failed — meal plan was NOT saved. Keep this page open and retry."); }
     }
     function loadPlan() {
       try {
@@ -3261,6 +3388,7 @@ const planWarnings = [];
     }
     /* ---- skeleton ---- */
     const wrap = root.createDiv({ cls: "food" });
+    const orderStatus = wrap.createDiv({ cls: "psub" }); orderStatus.setAttribute("role", "status");
     const hdr = wrap.createDiv({ cls: "hdr" });
     const hl = hdr.createDiv();
     hl.createDiv({ cls: "brand serif", text: "Diet" });
@@ -3316,7 +3444,9 @@ const planWarnings = [];
         e.preventDefault(); first.focus();
       }
     });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+    const onEscape = e => { if (e.key === "Escape") closeModal(); };
+    document.addEventListener("keydown", onEscape);
+    cleanupFood = () => document.removeEventListener("keydown", onEscape);
 
     const ALL_CUISINES = [...new Set(RECIPES.flatMap(cuisineTags))].sort();
     const ALL_MEALS = MEAL_ORDER.filter(m => RECIPES.some(r => mealLabel(r) === m));
@@ -3885,7 +4015,7 @@ const planWarnings = [];
           if (!(i.qty > 0)) continue;
           const key = `${i.name}|${i.unit}`;
           const cur = map.get(key) || {
-            key, name: i.name, unit: i.unit, qty: 0, cat: i.cat, amount: null,
+            key, ingredient_id: i.ingredient_id, name: i.name, unit: i.unit, qty: 0, cat: i.cat, amount: null,
             yieldRatio: i.yieldRatio, buyBasis: i.buyBasis, purchaseConversion: i.purchaseConversion,
             defVendor: i.vendor, options: new Map(),
             amtLines: 0, noAmtLines: 0,
@@ -3924,6 +4054,7 @@ const planWarnings = [];
           if (a.ml != null) a.ml /= item.yieldRatio;
           item.buyNote = `${item.buyBasis || "raw"} — recipe states cooked, ÷${item.yieldRatio}`;
         }
+        HealthData.subtractStock(item, invDb.stock);
         const pick = vendorPick.get(item.key);
         item.vendor = (pick && item.options.has(pick)) ? pick : item.defVendor;
         const opt = item.options.get(item.vendor);
@@ -3942,6 +4073,11 @@ const planWarnings = [];
       const active = buy.filter(i => !i.skipped);
       const ph = shopPanel.createDiv({ cls: "phead" });
       ph.createSpan({ cls: "pcount succ", text: items.length ? costSummary(active) : "" });
+      if (pendingOrder) {
+        const retry = shopPanel.createEl("button", { cls: "abtn", text: pendingOrder.kind === "undo" ? "Retry pending undo" : "Retry pending order" });
+        retry.disabled = orderBusy;
+        retry.onclick = commitPendingOrder;
+      }
       if (!items.length) {
         shopPanel.createDiv({ cls: "pbody" }).createDiv({ cls: "empty", text: "Build a plan first." });
         return;
@@ -3965,7 +4101,7 @@ const planWarnings = [];
             const cur = Math.max(0, opts.indexOf(i.vendor));
             const next = opts[(cur + 1) % opts.length];
             const chip = li.createSpan({ cls: "vchip", text: opts.length > 2 ? `⇄ ${next} · ${cur + 1}/${opts.length}` : `⇄ ${next}` });
-            chip.onclick = () => { vendorPick.set(i.key, next); savePlan(); renderShop(); };
+            chip.onclick = () => { vendorPick.set(i.key, next); savePlan(); renderShop(); renderRail(); };
           }
           const qtyEl = li.createSpan({ cls: "liqty" });
           if (i.skipped) qtyEl.setText("skipped");
@@ -3976,8 +4112,9 @@ const planWarnings = [];
             qtyEl.setText(`${i.amount ? fmtAmount(i.amount, 1) : unitPhrase(i.qty, i.unit)} · ${money(i.price_missing ? null : i.price)}`);
           }
           if(i.buyNote) li.createSpan({cls:"note",text:i.buyNote});
+          if(i.stockNote) li.createSpan({cls:"note",text:i.stockNote});
           const x = li.createSpan({ cls: "lix", text: i.skipped ? "↩" : "✕" });
-          x.onclick = () => { i.skipped ? skipSet.delete(i.key) : skipSet.add(i.key); savePlan(); renderShop(); };
+          x.onclick = () => { i.skipped ? skipSet.delete(i.key) : skipSet.add(i.key); savePlan(); renderShop(); renderRail(); };
         });
       });
       if (home.length) {
@@ -3988,22 +4125,22 @@ const planWarnings = [];
           li.createSpan({ cls: "liname", text: i.name });
           const low = LOWSTOCK.has(i.name);
           li.createSpan({ cls: "note" + (low ? " low" : ""), text: (low ? "LOW · " : "") + INVENTORY[i.name] });
-          const used = li.createSpan({ cls: "lix", text: "used up" });
+          const used = li.createEl("button", { cls: "lix", text: "used up" });
+          used.disabled = orderBusy || Boolean(pendingOrder);
           used.onclick = async () => {
+            if (orderBusy || pendingOrder) return;
+            used.disabled = true; orderBusy = true; inventoryEpoch++;
             try {
-              if (invDb && Array.isArray(invDb.stock) && ingDb && Array.isArray(ingDb.ingredients)) {
-                const gid = new Map(ingDb.ingredients.map(g2 => [g2.name, g2.id])).get(i.name);
-                const s = gid && invDb.stock.find(x => x.ingredient_id === gid);
-                if (s) {
-                  s.qty_on_hand = 0;
-                  s.confidence = "estimate";
-                  s.note = `used up ${todayISO()}`;
-                  await writeInventory();
+              invDb = await saveJSON(INV_PATH, (current, info) => {
+                const next = HealthData.inventory(info.exists ? current : null);
+                for (const stock of next.stock.filter(s => s.ingredient_id === i.ingredient_id)) {
+                  stock.qty_on_hand = 0; stock.confidence = "estimate"; stock.note = `used up ${todayISO()}`;
                 }
-              }
-              delete INVENTORY[i.name];
-              renderShop();
-            } catch (e) { console.warn("[food] used-up failed", e); toast("Inventory save failed"); }
+                next.last_updated = todayISO(); return next;
+              }, `food: used up ${i.name} [site]`);
+              refreshInventory(); renderAfterPlan();
+            } catch (e) { orderStatus.textContent = `Inventory update not confirmed: ${e.message}. Retry “used up” to save it.`; }
+            finally { orderBusy = false; renderShop(); renderSpend(); }
           };
         });
       }
@@ -4015,6 +4152,7 @@ const planWarnings = [];
       const btns = shopPanel.createDiv({ cls: "btnrow" });
       const copyBtn = btns.createEl("button", { cls: "abtn", text: "Copy list" });
       const exportBtn = btns.createEl("button", { cls: "abtn commit", text: "Commit order" });
+      exportBtn.disabled = orderBusy || Boolean(pendingOrder) || !active.length;
       const amazonItems = active.filter(i => i.vendor === "Amazon" && i.asin);
       if (amazonItems.length) {
         const azBtn = btns.createEl("button", { cls: "abtn", text: `Amazon cart (${amazonItems.length})` });
@@ -4039,7 +4177,7 @@ const planWarnings = [];
         catch (e) { console.warn("[food] clipboard failed", e); flash(copyBtn, "Failed"); }
       };
       exportBtn.onclick = async () => {
-        if (exportBtn.disabled) return;
+        if (exportBtn.disabled || orderBusy || pendingOrder || !active.length) return;
         exportBtn.disabled = true;
         const payload = {
           generated: new Date().toISOString(),
@@ -4071,70 +4209,51 @@ const planWarnings = [];
           known_subtotal: +active.reduce((a,i)=>a+(lineCost(i)||0),0).toFixed(2),
           cost_complete: costTotal(active) != null
         };
-        try {
-          await writeJSON(EXPORT_PATH, payload, `food: shopping list ${todayISO()} [site]`);
-          const byVendor = {};
-          for(const vendor of new Set(active.map(i=>i.vendor))) byVendor[vendor]=costTotal(active.filter(i=>i.vendor===vendor));
-          const invDelta = [];
-          try {
-            if (invDb && Array.isArray(invDb.stock) && ingDb && Array.isArray(ingDb.ingredients)) {
-              const idByName = new Map(ingDb.ingredients.map(g2 => [g2.name, g2.id]));
-              const stockById = new Map(invDb.stock.map(s => [s.ingredient_id, s]));
-              const today = todayISO();
-              active.forEach(i => {
-                const gid = idByName.get(i.name);
-                if (!gid) return;
-                let add, unit;
-                if (i.amount && i.amount.g != null) { add = i.amount.g; unit = "g"; }
-                else if (i.amount && i.amount.ml != null) { add = i.amount.ml; unit = "ml"; }
-                else if (i.amount && i.amount.ct != null) { add = i.amount.ct; unit = i.amount.u || i.unit || "unit"; }
-                else { add = Number(i.qty) || 0; unit = i.unit || "unit"; }
-                add = +add.toFixed(2);
-                if (add <= 0) return;
-                const ex = stockById.get(gid);
-                if (ex && ex.unit === unit) {
-                  ex.qty_on_hand = +(((Number(ex.qty_on_hand) || 0) + add).toFixed(2));
-                  ex.confidence = "estimate";
-                  ex.note = `+${add} ${unit} bought ${today}`;
-                  invDelta.push({ ingredient_id: gid, add, unit, created: false });
-                } else if (ex) {
-                  ex.confidence = "estimate";
-                  ex.note = `bought ${add} ${unit} ${today} (unit mismatch with "${ex.unit}" — not summed)`;
-                } else {
-                  const ni = { ingredient_id: gid, qty_on_hand: add, unit, confidence: "estimate", note: `bought ${today}` };
-                  invDb.stock.push(ni);
-                  stockById.set(gid, ni);
-                  invDelta.push({ ingredient_id: gid, add, unit, created: true });
-                }
-              });
-              await writeInventory();
-            }
-          } catch (e) { console.warn("[food] inventory bump failed (commit still ok)", e); }
-          spendLog.push({
-            ts: new Date().toISOString(), week_start: weekStartISO(new Date()),
-            est_total: payload.est_total, known_subtotal:payload.known_subtotal, cost_complete:payload.cost_complete, by_vendor: byVendor, items: active.length,
-            inv_delta: invDelta
-          });
-          await writeJSON(SPEND_PATH, spendLog, `food: grocery spend entry ${todayISO()} [site]`);
-          flash(exportBtn, "Committed ✓");
-          renderSpend();
-        }
-        catch (e) { console.warn("[food] commit failed", e); flash(exportBtn, "Failed"); toast("Commit failed — nothing written"); }
-        finally { exportBtn.disabled = false; }
+        const byVendor = {};
+        for (const vendor of new Set(active.map(i => i.vendor))) byVendor[vendor] = costTotal(active.filter(i => i.vendor === vendor));
+        const order = {
+          id: crypto.randomUUID(), date: todayISO(), payload,
+          purchases: active.map(i => ({ ingredient_id: i.ingredient_id, ...HealthData.purchaseQuantity(i) })),
+          spend: { ts: new Date().toISOString(), week_start: weekStartISO(new Date()), est_total: payload.est_total,
+            known_subtotal: payload.known_subtotal, cost_complete: payload.cost_complete, by_vendor: byVendor, items: active.length },
+        };
+        try { localStorage.setItem(ORDER_KEY, JSON.stringify(order)); pendingOrder = order; }
+        catch (_) { orderStatus.textContent = "Device storage failed — order was NOT saved. Keep this page open and retry."; exportBtn.disabled = false; return; }
+        await commitPendingOrder();
       };
+    }
+
+    async function commitPendingOrder() {
+      if (!pendingOrder || orderBusy) return;
+      orderBusy = true; inventoryEpoch++;
+      const order = pendingOrder;
+      const undoing = order.kind === "undo";
+      orderStatus.textContent = undoing ? "Undoing order…" : "Saving order…"; renderShop(); renderSpend();
+      try {
+        const docs = await saveHealthFiles(orderPaths, current => undoing
+          ? HealthData.undoDocuments(current, paths, order.id, order.date) : HealthData.orderDocuments(current, paths, order),
+          `food: ${undoing ? "undo" : "order"} ${order.id} [site]`);
+        orderStatus.textContent = `${undoing ? "Order undone" : "Order saved"}. Inventory and spending are up to date.`;
+        try { localStorage.removeItem(ORDER_KEY); pendingOrder = null; }
+        catch (_) { orderStatus.textContent = "Change saved; its device receipt could not be cleared. Retrying will verify this same change."; }
+        acceptDocuments(docs);
+      } catch (error) {
+        orderStatus.textContent = `${undoing ? "Undo" : "Order"} not confirmed: ${error.message}. It is saved on this device; retry safely.`;
+      } finally { orderBusy = false; renderShop(); renderSpend(); renderRail(); }
     }
 
     function renderSpend() {
       spendPanel.empty();
       const ph = spendPanel.createDiv({ cls: "phead" });
       ph.createSpan({ cls: "ptitle serif", text: "Grocery Spend" });
-      ph.createSpan({ cls: "pcount", text: spendLog.length ? `${spendLog.length} order${spendLog.length === 1 ? "" : "s"}` : "" });
+      const orders = spendLog.filter(e => !e.undone_at);
+      ph.createSpan({ cls: "pcount", text: orders.length ? `${orders.length} order${orders.length === 1 ? "" : "s"}` : "" });
       const body = spendPanel.createDiv({ cls: "pbody" });
-      if (!spendLog.length) { body.createDiv({ cls: "empty", text: "No orders committed yet." }); return; }
+      if (!orders.length) { body.createDiv({ cls: "empty", text: "No orders committed yet." }); return; }
       const budget = Number(TARGETS.grocery_week_usd) || null;
       const thisWeek = weekStartISO(new Date());
       const weeks = new Map();
-      spendLog.forEach(e => {
+      orders.forEach(e => {
         const w = weeks.get(e.week_start) || { total: 0, orders: 0 };
         w.total += e.est_total ?? e.known_subtotal ?? 0; w.orders += 1; if(e.est_total == null) w.incomplete = true;
         weeks.set(e.week_start, w);
@@ -4146,30 +4265,20 @@ const planWarnings = [];
         const q = li.createSpan({ cls: "liqty", text: `${money(w.total)}${w.incomplete ? " known + unpriced" : ""}${budget != null && wk === thisWeek ? ` / ${money(budget)}` : ""} · ${w.orders} order${w.orders === 1 ? "" : "s"}` });
         if (overBudget) q.style.color = "var(--warn)";
       });
-      const last = spendLog[spendLog.length - 1];
+      const last = orders[orders.length - 1];
       const btns = spendPanel.createDiv({ cls: "btnrow" });
       const undo = btns.createEl("button", { cls: "abtn", text: "Undo last commit" });
+      undo.disabled = orderBusy || Boolean(pendingOrder);
       if (!last.inv_delta) undo.title = "older order: removes the spend entry only, inventory untouched";
       let armed = false;
       undo.onclick = async () => {
+        if (orderBusy || pendingOrder) return;
         if (!armed) { armed = true; undo.setText(`Undo ${money(last.est_total)} — sure?`); return; }
-        undo.disabled = true;
+        const operation = { kind: "undo", id: last.id || last.ts, date: todayISO() };
         try {
-          (last.inv_delta || []).forEach(d => {
-            const s = invDb.stock.find(x => x.ingredient_id === d.ingredient_id);
-            if (!s) return;
-            if (d.created) invDb.stock.splice(invDb.stock.indexOf(s), 1);
-            else {
-              s.qty_on_hand = Math.max(0, +((Number(s.qty_on_hand) || 0) - d.add).toFixed(2));
-              s.confidence = "estimate";
-              s.note = `undo commit ${todayISO()}`;
-            }
-          });
-          if ((last.inv_delta || []).length) await writeInventory();
-          spendLog.pop();
-          await writeJSON(SPEND_PATH, spendLog, `food: undo last order [site]`);
-          renderShop(); renderSpend();
-        } catch (e) { console.warn("[food] undo failed", e); undo.setText("Failed"); undo.disabled = false; }
+          localStorage.setItem(ORDER_KEY, JSON.stringify(operation)); pendingOrder = operation;
+        } catch (_) { orderStatus.textContent = "Device storage failed — undo was NOT saved. Keep this page open and retry."; return; }
+        await commitPendingOrder();
       };
     }
 
@@ -4179,6 +4288,38 @@ const planWarnings = [];
     renderShop();
     renderRail();
     renderSpend();
+    refreshFood = () => {
+      if (orderBusy) return Promise.resolve();
+      if (refreshRequest) return refreshRequest;
+      void Weight.refresh();
+      const epoch = inventoryEpoch;
+      refreshRequest = (async () => {
+        try {
+          const [inventory, spend, policy, meals, ingredients, packs] = await Promise.all([
+            readJSON(INV_PATH, null), readJSON(SPEND_PATH, []), readJSON(DATA_PATH, null),
+            readJSON("orgs/health/data/meals.json", null), readJSON("orgs/health/data/ingredients.json", null),
+            readJSON("orgs/health/data/packs.json", { packs: [] }),
+          ]);
+          if (epoch !== inventoryEpoch) return;
+          acceptDocuments({ [INV_PATH]: inventory, [SPEND_PATH]: spend });
+          orderStatus.textContent = pendingOrder ? "An order is awaiting confirmation. Use the retry button in Shop." : "Kitchen stock and spending refreshed.";
+          if (JSON.stringify([policy, meals, ingredients, packs]) !== JSON.stringify([data, mealsDb, ingDb, packDb])) {
+            orderStatus.append(" Updated recipes or targets are available. Your meal selections will be retained. ");
+            const reload = orderStatus.createEl("button", { text: "Load updated recipes" });
+            reload.disabled = Boolean(pendingOrder);
+            reload.onclick = () => {
+              if (orderBusy || pendingOrder) return;
+              mounted = false; void mount(root);
+            };
+          }
+        } catch (error) {
+          orderStatus.textContent = `Could not refresh the kitchen: ${error.message}. The last loaded data is still shown. `;
+          orderStatus.createEl("button", { text: "Retry kitchen refresh" }).onclick = refreshFood;
+        }
+      })().finally(() => { refreshRequest = null; });
+      return refreshRequest;
+    };
+    if (pendingOrder) orderStatus.textContent = "An order is awaiting confirmation. Use the retry button in Shop.";
   }
 
   return { mount };

@@ -67,6 +67,7 @@ const WorkoutData = (() => {
     }
     function loadCore() {
       if (coreRequest) return coreRequest;
+      const before = { sessions: { ...state.sessions }, notes: { ...state.notes } };
       coreRequest = (async () => {
         const [week, sessions, notes] = await Promise.all([
           retryRead(() => readFile(paths.week), wait),
@@ -75,8 +76,18 @@ const WorkoutData = (() => {
         ]);
         if (!Array.isArray(week?.data?.days) || !week.data.days.length) throw new Error(`Could not load ${paths.week}`);
         state.week = week.data;
-        state.sessions = sessions?.data && typeof sessions.data === "object" ? sessions.data : {};
-        state.notes = notes?.data && typeof notes.data === "object" ? notes.data : {};
+        for (const [key, file] of [["sessions", sessions], ["notes", notes]]) {
+          const remote = file?.data;
+          if (remote != null && (typeof remote !== "object" || Array.isArray(remote))) throw Error(`Invalid workout ${key}`);
+          const merged = { ...(remote || {}) };
+          // A save can finish while these reads are in flight and leave the
+          // outbox before hydration. Preserve those newer local values too.
+          for (const id of new Set([...Object.keys(before[key]), ...Object.keys(state[key])])) {
+            if (before[key][id] === state[key][id]) continue;
+            if (Object.hasOwn(state[key], id)) merged[id] = state[key][id]; else delete merged[id];
+          }
+          state[key] = merged;
+        }
         applyPending();
         return state;
       })().finally(() => { coreRequest = null; });
