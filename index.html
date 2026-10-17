@@ -18,6 +18,7 @@
 <script src="workout-data.js"></script>
 <script src="workout-review.js"></script>
 <script src="health-data.js"></script>
+<script src="sync-client.js"></script>
 <script src="recipe-workflow.js?v=20260926-cards"></script>
 </head>
 <body>
@@ -111,9 +112,20 @@ function b64encode(text) {
   return btoa(bin);
 }
 /* read one file -> { data (parsed json or raw), sha } ; null if 404 */
-async function readFile(path, ref) {
+const readBases = new Map();
+async function readFile(path, ref, capture = true) {
+  // Restore the last durable intent on reopening, even while offline. Transport
+  // reads pass capture=false so reconciliation still uses the actual remote file.
+  const pending = !ref && capture && typeof projectOutbox !== 'undefined' && projectOutboxRepo === store.repo
+    ? projectOutbox?.pending().filter(op => op.path === path && op.kind !== 'append').at(-1) : null;
+  if (pending) {
+    const raw = pending.text; readBases.set(path, raw);
+    if (raw === null) return null;
+    let data; try {data = JSON.parse(raw);} catch (_) {data = raw;}
+    return {data, raw, sha: null, pending: true};
+  }
   const res = await gh(`contents/${path}?t=${Date.now()}${ref ? `&ref=${encodeURIComponent(ref)}` : ""}`);
-  if (res.status === 404) return null;
+  if (res.status === 404) { if (!ref && capture) readBases.set(path, null); return null; }
   if (!res.ok) throw new Error(`GitHub ${res.status} reading ${path}`);
   const body = await res.json();
   let encoded = body;
@@ -128,6 +140,7 @@ async function readFile(path, ref) {
   const raw = b64decode(encoded.content);
   let data; try { data = JSON.parse(raw); } catch { data = raw; }
   if (!ref) shaMap.set(path, body.sha);   // Pinned snapshots must not replace the current SHA.
+  if (!ref && capture) readBases.set(path, raw);
   return { data, sha: body.sha, raw };
 }
 /* list a directory -> [{name, path, sha}] ; [] if 404 */
@@ -139,25 +152,32 @@ async function listDir(path) {
 }
 /* write a file (create or update). shaMap caches shas so repeat writes skip a read. */
 const shaMap = new Map();
+let projectOutbox, projectOutboxRepo;
+function ensureProjectOutbox() {
+  if (projectOutbox && projectOutboxRepo === store.repo) return projectOutbox;
+  const repo = store.repo; projectOutboxRepo = repo;
+  projectOutbox = SyncClient.create({storage: localStorage, repo,
+    read: path => { if (repo !== store.repo) throw Error("Reconnect the original repository"); return readFile(path, undefined, false); },
+    async write(path, text, sha, message) {
+      if (repo !== store.repo) throw Error("Reconnect the original repository");
+      const body = {message, ...(sha ? {sha} : {}), ...(text === null ? {} : {content: b64encode(text)})};
+      const res = await gh(`contents/${path}`, {method: text === null ? "DELETE" : "PUT", body: JSON.stringify(body)});
+      if (!res.ok) throw Object.assign(Error(`GitHub ${res.status}; pending edit retained`), {status: res.status});
+    },
+    lock: fn => navigator.locks ? navigator.locks.request(`secundus-sync:${repo}`, fn) : fn(),
+    changed: () => paintSync(),
+  });
+  return projectOutbox;
+}
 async function writeRaw(path, text, message) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const body = { message, content: b64encode(text) };
-    if (shaMap.has(path)) body.sha = shaMap.get(path);
-    const res = await gh(`contents/${path}`, { method: "PUT", body: JSON.stringify(body) });
-    if (res.ok) {
-      const j = await res.json();
-      shaMap.set(path, j.content.sha);
-      return true;
-    }
-    if (res.status === 409 || res.status === 422) {   // raced or stale/missing sha — refresh and retry
-      const cur = await readFile(path);
-      if (cur) shaMap.set(path, cur.sha); else shaMap.delete(path);
-      await new Promise(r => setTimeout(r, 350 * attempt));
-      continue;
-    }
-    throw new Error(`GitHub ${res.status} writing ${path}`);
-  }
-  throw new Error(`write conflict persisted on ${path}`);
+  if (!readBases.has(path)) await readFile(path);
+  const box = ensureProjectOutbox();
+  const last = box.pending().filter(op => op.path === path).at(-1);
+  const op = last && last.text === text ? last : box.enqueue(path, last ? last.text : readBases.get(path), text, message);
+  readBases.set(path, text);
+  await box.flush();
+  if (box.pending().some(item => item.id === op.id)) throw Error(box.status().error || "Saved locally; automatic sync will retry.");
+  return true;
 }
 /* shared/actions.log is the repo's audit trail and /verify reads it. appendLog
    lived inside the Home IIFE, so Workout and Diet could not reach it; hoisted
@@ -171,46 +191,19 @@ function logStamp() {
 async function appendActionLog(verb, target, note) {
   const line = `${logStamp()} | site | ${verb} | ${target} | ok${note ? ' (' + note + ')' : ''} | ${target}\n`;
   try {
-    const cur = await readFile(ACTIONS_LOG);
-    const body = (cur && typeof cur.data === 'string' ? cur.data : (cur ? cur.raw : '')) || '';
-    await writeRaw(ACTIONS_LOG, body + line, `log: ${verb} ${target} [site]`);
+    const box=ensureProjectOutbox();box.append(ACTIONS_LOG,line,`log: ${verb} ${target} [site]`);await box.flush();
   } catch (e) { console.warn('[site] appendActionLog failed', e); }
 }
 
-async function deleteFile(path, message) {
-  if (!shaMap.has(path)) {
-    const cur = await readFile(path);
-    if (!cur) return true;
-    shaMap.set(path, cur.sha);
-  }
-  const res = await gh(`contents/${path}`, {
-    method: "DELETE",
-    body: JSON.stringify({ message, sha: shaMap.get(path) }),
-  });
-  if (res.ok || res.status === 404) { shaMap.delete(path); return true; }
-  throw new Error(`GitHub ${res.status} deleting ${path}`);
-}
-/* read-modify-write with conflict retry for shared JSON docs (sessions etc.) */
+async function deleteFile(path, message) { return writeRaw(path, null, message); }
+/* Materialize the intended delta before queuing; retries never rerun a callback. */
 async function saveJSON(path, mutate, message) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const cur = await readFile(path);
-    const data = cur ? cur.data : {};
-    const next = mutate(structuredClone(data), { exists: Boolean(cur) });
-    try {
-      // One CAS attempt only. A conflict must rerun mutate against fresh data;
-      // writeRaw's internal retry would send the old payload with a new SHA.
-      const body = { message, content: b64encode(JSON.stringify(next, null, 2) + "\n") };
-      if (cur) body.sha = cur.sha;
-      const res = await gh(`contents/${path}`, { method: "PUT", body: JSON.stringify(body) });
-      if (!res.ok) throw new Error(`GitHub ${res.status} writing ${path}`);
-      const saved = await res.json();
-      shaMap.set(path, saved.content.sha);
-      return next;
-    } catch (e) {
-      if (attempt === 3) throw e;
-      await new Promise(r => setTimeout(r, 350 * attempt));
-    }
-  }
+  if (!readBases.has(path)) await readFile(path);
+  const box = ensureProjectOutbox(), last = box.pending().filter(op => op.path === path).at(-1);
+  const raw = last ? last.text : readBases.get(path);
+  const next = mutate(raw === null ? {} : JSON.parse(raw), {exists: raw !== null});
+  await writeRaw(path, JSON.stringify(next, null, 2) + "\n", message);
+  return next;
 }
 /* private-repo image -> blob URL (cached) */
 const imgCache = new Map();
@@ -296,11 +289,25 @@ function relTime(ms) {
   const h = Math.round(m / 60);
   return h < 24 ? h + "h ago" : Math.round(h / 24) + "d ago";
 }
+function pendingDeviceEdits() {
+  try {return ["wkt-outbox:","secundus.weight.outbox:"].some(prefix=>JSON.parse(localStorage.getItem(prefix+store.repo)||"[]").length) || Boolean(localStorage.getItem("secundus.food.order:"+store.repo) || localStorage.getItem("secundus.food.plan-draft:"+store.repo));}
+  catch (_) {return true;}
+}
 function paintSync() {
   const dot = $("sync-dot"), label = $("sync-label"), btn = $("syncBtn");
   if (!dot || !label) return;
   dot.classList.remove("ok", "err", "busy");
-  if (SYNC.inflight > 0) {
+  const queue = projectOutbox?.status();
+  if (queue?.conflicts) {
+    dot.classList.add("err"); label.textContent = "Edits retained · conflict";
+    if (btn) btn.title = "Another edit changed the same value. Click to review retained edits.";
+  } else if (queue?.pending) {
+    dot.classList.add(queue.running ? "busy" : "err");
+    label.textContent = queue.running ? "Syncing pending edits…" : `Saved locally · ${queue.pending} pending`;
+    if (btn) btn.title = queue.error || "Automatic retry is enabled; pending edits remain on this device.";
+  } else if (pendingDeviceEdits()) {
+    dot.classList.add("busy"); label.textContent="Saved locally · sync pending";
+  } else if (SYNC.inflight > 0) {
     dot.classList.add("busy");
     label.textContent = "Saving…";
     if (btn) btn.title = "Committing to the repo";
@@ -314,16 +321,37 @@ function paintSync() {
     if (btn) btn.title = "Cannot reach the repo — click to re-enter your token";
   } else {
     dot.classList.add("ok");
-    label.textContent = SYNC.at ? "Synced " + relTime(SYNC.at)
+    label.textContent = SYNC.at ? "Cloud synced " + relTime(SYNC.at)
                                 : (store.repo.split("/")[1] || "Connected");
     if (btn) btn.title = "Connected to " + store.repo + " — click to re-enter your token";
   }
 }
 function syncBegin() { SYNC.inflight++; paintSync(); }
-function syncOk()    { SYNC.inflight = Math.max(0, SYNC.inflight - 1); SYNC.at = Date.now(); SYNC.failed = false; paintSync(); }
+function syncOk()    { SYNC.inflight = Math.max(0, SYNC.inflight - 1); SYNC.at = projectOutbox?.status().verified || Date.now(); SYNC.failed = false; paintSync(); }
 function syncFail()  { SYNC.inflight = Math.max(0, SYNC.inflight - 1); SYNC.failed = true; paintSync(); }
 setInterval(() => { if (SYNC.at && SYNC.inflight === 0 && !SYNC.failed) paintSync(); }, 30000);
 
+function watchProject(refresh, enabled = () => true) {
+  const poll = SyncClient.watch({refresh, enabled: () => !document.hidden && navigator.onLine !== false && enabled()});
+  window.addEventListener("online", poll.wake); window.addEventListener("focus", poll.wake);
+  document.addEventListener("visibilitychange", poll.wake); return poll;
+}
+watchProject(() => ensureProjectOutbox().flush(), () => !!store.pat && !!store.repo);
+watchProject(async () => {
+  const label=$("release-label");if(!label)return true;
+  const response=await fetch("sync-release.json?t="+Date.now(),{cache:"no-store",credentials:"omit"});
+  if(!response.ok){label.textContent="App version check pending";return false;}
+  const release=await response.json(),current=document.querySelector('meta[name="secundus-release"]')?.content;
+  if(release.id===current){label.textContent="App current";return true;}
+  label.textContent="App update ready · edits retained";
+  let focused=document.activeElement;while(focused?.shadowRoot?.activeElement)focused=focused.shadowRoot.activeElement;
+  if(ensureProjectOutbox().status().pending || pendingDeviceEdits() || SYNC.inflight || Workout.busy() ||
+    focused?.matches('input,textarea,select,[contenteditable]') || document.querySelector('.k-edit,dialog[open],details[open],.backdrop.on'))return true;
+  const page=await fetch("index.html?t="+Date.now(),{cache:"no-store",credentials:"omit"});
+  if(page.ok && (await page.text()).includes(`name="secundus-release" content="${release.id}"`))location.reload();
+  return true;
+},()=>!!store.pat && !!store.repo);
+window.addEventListener("storage", event => { if (event.key?.startsWith("secundus.sync:")) paintSync(); });
 async function verifyConnection() {
   try {
     const res = await gh("");
@@ -505,7 +533,7 @@ const Home = (() => {
           : (c.urgent ? `<span class="kc-due" style="color:var(--bad)">!</span>` : '');
         const err = CARD_ERR.get(c.id);
         const errRow = err
-          ? `<div class="kc-err"><span class="kc-err-t">not saved</span><button class="kc-retry" data-retry="${esc(c.id)}">Retry</button><button class="kc-discard" data-discard="${esc(c.id)}">Discard</button></div>`
+          ? `<div class="kc-err"><span class="kc-err-t">sync pending</span><button class="kc-retry" data-retry="${esc(c.id)}">Retry</button><button class="kc-discard" data-discard="${esc(c.id)}">Review sync</button></div>`
           : '';
         return `<div class="k-card${err ? ' err' : ''}" data-id="${esc(c.id)}" title="Click to edit &middot; drag to move"><div class="kc-title">${esc(c.t)}</div><div class="kc-meta"><span class="kc-tag" style="background:${dc[0]};color:${dc[1]}">${esc(c.d)}</span>${due}</div>${errRow}</div>`;
       }).join('');
@@ -546,8 +574,7 @@ const Home = (() => {
     if (entry && entry.retry) await entry.retry();
   }
   async function discardCard(id) {
-    CARD_ERR.delete(id);
-    await reloadKanban();              // the repo is the truth; drop the local edit
+    openTokenReset(ROOT);
   }
 
   /* ---- inline editors -----------------------------------------------------
@@ -564,23 +591,31 @@ const Home = (() => {
     const inp = el(box, 'input', 'k-edit-in');
     inp.type = 'text'; inp.value = value || ''; inp.placeholder = placeholder;
     inp.setAttribute('aria-label', placeholder);
+    const draftKey = `secundus.editor:${store.repo}:${placeholder}:${value}`;
+    inp.value = localStorage.getItem(draftKey) ?? inp.value;
+    inp.addEventListener('input', () => { try {localStorage.setItem(draftKey, inp.value);} catch (_) {toast('Device storage is full; keep this editor open.', 5000);} });
     const row = el(box, 'div', 'k-edit-row');
     const ok = el(row, 'button', 'k-edit-ok', 'Save');
     const no = el(row, 'button', 'k-edit-x', 'Cancel');
-    const send = () => { const v = inp.value.trim(); if (!v) { inp.focus(); return; } onCommit(v); };
+    const cancel = () => {localStorage.removeItem(draftKey); onCancel();};
+    const send = async () => {
+      const v = inp.value.trim(); if (!v) { inp.focus(); return; }
+      const saved = await onCommit(v);
+      if (saved || ensureProjectOutbox().pending().some(op => op.path === KANBAN_PATH)) localStorage.removeItem(draftKey);
+    };
     ok.onclick = send;
-    no.onclick = onCancel;
+    no.onclick = cancel;
     if (onDelete) {
       const del = el(row, 'button', 'k-edit-del', 'Delete');
       let armed = false;
       del.onclick = () => {
         if (!armed) { armed = true; del.textContent = 'Delete — sure?'; del.classList.add('armed'); return; }
-        onDelete();
+        onDelete(); localStorage.removeItem(draftKey);
       };
     }
     inp.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); send(); }
-      else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
     });
     return { box, inp };
   }
@@ -599,7 +634,7 @@ const Home = (() => {
       };
       KDB.cards.push(card);
       renderAll();                     // optimistic: the board reacts now, commit follows
-      await commit('EDITED', KANBAN_PATH, `added ${card.id}`,
+      return await commit('EDITED', KANBAN_PATH, `added ${card.id}`,
         `“${card.t}” was not saved`, card.id, () => commitAdd(card));
     }, () => box.remove());
     body.insertBefore(box, body.firstChild);
@@ -621,7 +656,7 @@ const Home = (() => {
       done();
       card.t = t;
       renderAll();
-      await commitRename(card);
+      return await commitRename(card);
     }, done, async () => {
       done();
       KDB.cards = KDB.cards.filter(c => c.id !== id);
@@ -845,18 +880,12 @@ const Home = (() => {
     return String(text || '').split('\n').map(l => l.trim()).filter(l => l.startsWith('- ')).map(l => l.slice(2).trim()).filter(Boolean);
   }
   async function saveCapture(text) {
-    const line = text.trim();
-    if (!line) return;
-    const t = new Date();
-    const stamped = `- ${line} (${pad(t.getHours())}:${pad(t.getMinutes())})\n`;
-    const path = capturePath();
+    const line=text.trim();if(!line)return false;
+    const t=new Date(),stamped=`- ${line} (${pad(t.getHours())}:${pad(t.getMinutes())})\n`;
     try {
-      const cur = await readFile(path);
-      const body = cur ? (typeof cur.data === 'string' ? cur.data : cur.raw) : null;
-      await writeRaw(path, body != null ? body + stamped : `# Capture ${todayISO()}\n\n${stamped}`, `capture: 1 line [site]`);
-      await appendLog('WROTE', path, 'captured 1 line');
-    } catch (e) { toast('Capture failed'); }
-    await renderCapture();
+      const box=ensureProjectOutbox();box.append(capturePath(),stamped,'capture: 1 line [site]',`# Capture ${todayISO()}\n\n`);
+      void box.flush().then(()=>renderCapture()).catch(()=>{});return true;
+    } catch(e) {toast('Capture was not saved; keep this draft open.');return false;}
   }
   async function promoteCapture(text) {
     const t = text.replace(/\s*\(\d{2}:\d{2}\)\s*$/, '').trim();
@@ -1255,7 +1284,7 @@ const Home = (() => {
       }).catch(error => { academicsAsset = null; throw error; });
       await academicsAsset;
       host.textContent = '';
-      await window.Academics.mount(host, { readFile });
+      await window.Academics.mount(host, { readFile, watch: refresh => watchProject(refresh, () => localStorage.getItem("secundus.view") === "academics") });
       host.dataset.acMounted = '1';
     } catch (_) {
       host.textContent = 'Academics could not load. ';
@@ -1277,7 +1306,7 @@ const Home = (() => {
       }).catch(error => { learningAsset = null; throw error; });
       await learningAsset;
       host.textContent = '';
-      window.Learning.mount(host);
+      window.Learning.mount(host, {watch: refresh => watchProject(refresh, () => localStorage.getItem("secundus.view") === "learning")});
       host.dataset.learningMounted = '1';
     } catch (_) {
       host.textContent = 'Learning could not load. ';
@@ -1326,6 +1355,19 @@ const Home = (() => {
     const open = host.querySelector('.tok-pop');
     if (open) { open.remove(); return; }
     const pop = el(host, 'div', 'tok-pop');
+    const pending = ensureProjectOutbox().pending();
+    if (pending.length) {
+      el(pop, 'div', 'tok-msg', `${pending.length} edits retained on this device. Conflicts require a choice; other saves retry automatically.`);
+      for (const op of pending.filter(item => item.conflict)) {
+        el(pop, 'div', 'tok-msg', op.path);
+        const copy = el(pop, 'button', 'tok-no', 'Download pending edit');
+        copy.onclick = () => {const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([op.text ?? 'Deleted locally'], {type:'text/plain'})); a.download = op.path.split('/').pop() + '.pending.txt'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);};
+        const keep = el(pop, 'button', 'tok-go', 'Keep my edit for this file');
+        keep.onclick = async () => {const current = await readFile(op.path, undefined, false); ensureProjectOutbox().resolve(op.id, current?.raw ?? null, op.text); await ensureProjectOutbox().flush(); pop.remove();};
+      }
+      const retry = el(pop, 'button', 'tok-no', 'Retry sync'); retry.onclick = () => ensureProjectOutbox().flush();
+      const close = el(pop, 'button', 'tok-no', 'Close'); close.onclick = () => pop.remove(); return;
+    }
     el(pop, 'div', 'tok-msg', 'Forget the token stored on this device and enter a new one? Nothing in the repo changes.');
     const row = el(pop, 'div', 'tok-row');
     const go = el(row, 'button', 'tok-go', 'Re-enter token');
@@ -1380,7 +1422,7 @@ const Home = (() => {
       if (hab) { toggleHabitToday(hab.getAttribute('data-habit')); return; }
       if (t.closest('#capSave')) {
         const inp = root.querySelector('#capInput');
-        if (inp && inp.value.trim()) { const v = inp.value; inp.value = ''; saveCapture(v); }
+        if (inp && inp.value.trim()) { const v = inp.value; saveCapture(v).then(saved=>{if(saved && inp.value===v){inp.value='';localStorage.removeItem(`secundus.capture:${store.repo}`);}}); }
         return;
       }
       const promote = t.closest('[data-promote]');
@@ -1404,7 +1446,7 @@ const Home = (() => {
       const inp = e.target.closest && e.target.closest('#capInput');
       if (!inp || !inp.value.trim()) return;
       e.preventDefault();
-      const v = inp.value; inp.value = ''; saveCapture(v);
+      const v = inp.value; saveCapture(v).then(saved=>{if(saved && inp.value===v){inp.value='';localStorage.removeItem(`secundus.capture:${store.repo}`);}});
     });
     /* Pointer-based drag & drop.
        Mouse behaves exactly as it always has: 5px of movement starts the drag.
@@ -1533,6 +1575,7 @@ const Home = (() => {
     <button class="nav-btn" data-view="builder">BUILDER</button>
   </nav>
   <div class="right">
+    <span class="st" id="release-label" role="status"></span>
     <span class="st" id="syncBtn" title="Repo connection — click to re-enter your token" style="cursor:pointer">
       <span id="sync-label"></span>
       <span id="sync-dot"></span>
@@ -1714,6 +1757,7 @@ const Home = (() => {
     $('sync-label').textContent = 'Connecting…';
     $('sync-dot').classList.add('busy');
     await verifyConnection();
+    await ensureProjectOutbox().flush();
 
     await loadKanban();
     if (!KDB) await showBoardFailure(root);
@@ -1745,11 +1789,22 @@ const Home = (() => {
     const qs = root.querySelector('#quoteSrc'); if (qs) qs.textContent = '— ' + q.s;
 
     renderAll(root);
+    const capture=root.querySelector('#capInput'),captureKey=`secundus.capture:${store.repo}`;
+    if(capture){capture.value=localStorage.getItem(captureKey)||'';capture.addEventListener('input',()=>{try{localStorage.setItem(captureKey,capture.value);}catch(_){toast('Device storage is full; keep this capture open.');}});}
     attachListeners(root);
     showView(root, localStorage.getItem('secundus.view') || 'home');
     renderStreaks(root);
     renderCapture(root);
     renderToday(root);
+    watchProject(async () => {
+      if (ensureProjectOutbox().status().pending || root.querySelector('.k-edit') || root.contains(document.activeElement) && document.activeElement.matches('input,textarea,select,[contenteditable]')) return true;
+      const [boardFile, queueFile, streaksFile] = await Promise.all([readFile(KANBAN_PATH,undefined,false),readFile(QUEUE_PATH,undefined,false),readFile(STREAKS_PATH,undefined,false)]);
+      // Recheck after the asynchronous reads: typing may have started meanwhile.
+      if (ensureProjectOutbox().status().pending || root.querySelector('.k-edit') || root.contains(document.activeElement) && document.activeElement.matches('input,textarea,select,[contenteditable]')) return true;
+      if (boardFile) {KDB=boardFile.data;readBases.set(KANBAN_PATH,boardFile.raw);}
+      QUEUE=queueFile?.data||[];STREAKS=streaksFile?.data||{};readBases.set(STREAKS_PATH,streaksFile?.raw??null);CARD_ERR.clear();renderAll(root);renderStreaks(root);
+      return true;
+    }, () => ['home','todo','pipeline','projects','builder'].includes(localStorage.getItem('secundus.view')));
     mounted = true;
   }
 
@@ -2933,7 +2988,7 @@ const Workout = (() => {
     void refreshHistory();
   }
 
-  return { mount };
+  return { mount, busy: () => Boolean(activeClock) };
 })();
 
 
@@ -3184,11 +3239,62 @@ const planWarnings = [];
     const vendorPick = new Map();
     const skipSet = new Set();
     const PLAN_KEY = "secundus-food-plan-v1";
+    const PLAN_PATH = "orgs/health/data/meal-plan.json";
+    const PLAN_BASE = `secundus.food.plan-base:${store.repo}`, PLAN_DRAFT = `secundus.food.plan-draft:${store.repo}`;
+    let planReady = false, planSyncing = false, planTimer, planRevision = 0;
+    let planBase = localStorage.getItem(PLAN_BASE), planDirty = Boolean(localStorage.getItem(PLAN_DRAFT));
+    const cloudPlan = () => ({schema_version: 1, meals: Object.fromEntries([...plan].map(([id,e]) => [id,{servings:e.servings,ver:e.ver||null,qtys:Object.fromEntries(e.qtys||[])}])), skips:Object.fromEntries([...skipSet].map(k=>[k,true])), vendors:Object.fromEntries(vendorPick)});
+    const devicePlan = () => JSON.stringify({plan:[...plan].map(([id,e])=>[id,{servings:e.servings,ver:e.ver||null,qtys:[...(e.qtys||[])]}]),skips:[...skipSet],vendors:[...vendorPick]});
     function savePlan() {
-      try { localStorage.setItem(PLAN_KEY, JSON.stringify({
-        plan: [...plan].map(([id, e]) => [id, { servings: e.servings, ver: e.ver || null, qtys: [...(e.qtys || new Map())] }]),
-        skips: [...skipSet], vendors: [...vendorPick]
-      })); } catch (e) { toast("Device storage failed — meal plan was NOT saved. Keep this page open and retry."); }
+      const text = devicePlan();
+      if (text === localStorage.getItem(PLAN_KEY)) return;
+      try {
+        localStorage.setItem(PLAN_KEY,text);
+        if(planReady || plan.size || planDirty) {
+          localStorage.setItem(PLAN_DRAFT,JSON.stringify({base:planBase,text:JSON.stringify(cloudPlan(),null,2)+"\n"}));
+          planDirty=true;planRevision++;
+          clearTimeout(planTimer);planTimer=setTimeout(syncPlan,600);
+        }
+      } catch (e) {toast("Device storage failed — keep this meal plan open and retry.");}
+    }
+    async function syncPlan() {
+      if(planSyncing)return false;planSyncing=true;
+      try {
+        const revision=planRevision,remote=planDirty && planReady ? null : await readFile(PLAN_PATH,undefined,false);
+        if(!planReady) {
+          planReady=true;
+          // A legacy local selection has no shared baseline. Retain it rather than choosing a winner.
+          if(plan.size && planBase===null && !planDirty) {
+            planDirty=true;
+            localStorage.setItem(PLAN_DRAFT,JSON.stringify({base:null,text:JSON.stringify(cloudPlan(),null,2)+"\n"}));
+          }
+        }
+        if(planDirty) {
+          const draft=JSON.parse(localStorage.getItem(PLAN_DRAFT));
+          if(!draft)throw Error("Meal plan draft is unavailable; keep this page open.");
+          readBases.set(PLAN_PATH,draft.base);
+          await writeRaw(PLAN_PATH,draft.text,"diet: sync meal plan [site]");
+          planBase=draft.text;localStorage.setItem(PLAN_BASE,planBase);
+          if(revision===planRevision) {planDirty=false;localStorage.removeItem(PLAN_DRAFT);}
+          return true;
+        }
+        const focused=document.activeElement;
+        if(revision!==planRevision || modalId || orderBusy || focused && root.contains(focused) && /^(INPUT|TEXTAREA|SELECT)$/.test(focused.tagName))return true;
+        if(remote && remote.raw!==planBase) {
+          const doc=remote.data;
+          if(doc.schema_version!==1 || !doc.meals || typeof doc.meals!=='object')throw Error("Saved meal plan is invalid; current plan retained.");
+          // Missing catalog entries cannot silently remove selections.
+          if(Object.keys(doc.meals).some(id=>!byId.has(id)))throw Error("Meal plan uses a recipe not yet loaded; retrying after catalog refresh.");
+          plan.clear();skipSet.clear();vendorPick.clear();
+          for(const [id,e] of Object.entries(doc.meals))plan.set(id,{servings:e.servings,ver:e.ver,qtys:new Map(Object.entries(e.qtys||{}))});
+          for(const [key,value] of Object.entries(doc.skips||{}))if(value)skipSet.add(key);
+          for(const [key,value] of Object.entries(doc.vendors||{}))vendorPick.set(key,value);
+          localStorage.setItem(PLAN_KEY,devicePlan());planBase=remote.raw;localStorage.setItem(PLAN_BASE,planBase);
+          readBases.set(PLAN_PATH,planBase);renderAfterPlan();
+        }
+        return true;
+      } catch(error) {orderStatus.textContent=`Meal plan retained on this device: ${error.message}`;return false;}
+      finally {planSyncing=false;}
     }
     function loadPlan() {
       try {
@@ -4394,6 +4500,7 @@ const planWarnings = [];
             await commitPendingOrder();
             if (pendingOrder) return false;
           }
+          await syncPlan();
           const readEpoch = inventoryEpoch;
           const [inventory, spend, policy, meals, ingredients, packs] = await Promise.all([
             readJSON(INV_PATH, null), readJSON(SPEND_PATH, []), readJSON(DATA_PATH, null),
@@ -4414,6 +4521,7 @@ const planWarnings = [];
       })().finally(() => { refreshRequest = null; });
       return refreshRequest;
     };
+    void syncPlan();
     if (pendingOrder) orderStatus.textContent = "An order is awaiting confirmation. It will retry automatically.";
   }
 

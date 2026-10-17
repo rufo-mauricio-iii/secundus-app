@@ -48,16 +48,24 @@ const RecipeWorkflow = (() => {
     const status=document.createElement('p');status.setAttribute('role','status');
     const results=document.createElement('div');results.className='recipe-results';
     form.append(mode,text,planning,submit,refresh);box.append(status,results);
-    let loaded=false;
+    const draftKey=`secundus.recipe-request:${store.repo}`;
+    try {const draft=JSON.parse(localStorage.getItem(draftKey)||'null');if(draft){text.value=draft.text;mode.value=draft.mode;check.checked=draft.planning;}} catch (_) {}
+    const saveDraft=()=>{try{localStorage.setItem(draftKey,JSON.stringify({text:text.value,mode:mode.value,planning:check.checked}));}catch(_){status.textContent='Device storage is full; keep this draft open.';}};
+    form.addEventListener('input',saveDraft);form.addEventListener('change',saveDraft);
+    let loaded=false, loading=false, lastJobs;
+
     async function load() {
+      if(loading || results.contains(document.activeElement))return true;loading=true;
       refresh.disabled=true;
       try {
         const files=(await listDir(DIR)).filter(f=>f.name.endsWith('.json') && f.name!=='schema.json');
         const jobs=await Promise.all(files.map(f=>readFile(f.path)));
+        if(results.contains(document.activeElement))return true;
+        const signature=JSON.stringify(jobs);if(signature===lastJobs)return true;lastJobs=signature;
         results.replaceChildren();
         for(const {data:j} of jobs.filter(Boolean).sort((a,b)=>b.data.created_at.localeCompare(a.data.created_at)).slice(0,20)) render(j);
         status.textContent=jobs.length?'Latest requests and results.':'No requests yet.';loaded=true;
-      } catch(e) {status.textContent=e.message;} finally {refresh.disabled=false;}
+      } catch(e) {status.textContent=e.message;} finally {loading=false;refresh.disabled=false;}
     }
     function render(j) {
       const card=document.createElement('article');results.append(card);
@@ -99,13 +107,18 @@ const RecipeWorkflow = (() => {
       submit.disabled=true;
       const id=crypto.randomUUID(),request={mode:mode.value,text:text.value.trim(),planning_mode:check.checked?'daily':'recipe_only'};
       try {
-        await saveJSON(`${DIR}/${id}.json`,current=>{
-          if(current.id) throw Error('Request already exists');
-          return {schema_version:1,id,status:'queued',created_at:new Date().toISOString(),request};
-        },`recipes: queue ${id} [site]`);
-        text.value='';await load();status.textContent='Queued for the next desktop run.';
+        const outbox=ensureProjectOutbox();
+        // UUID paths are new files. Persist before the first network request so
+        // an offline submission retries automatically with the very same ID.
+        const job={schema_version:1,id,status:'queued',created_at:new Date().toISOString(),request};
+        const op=outbox.enqueue(`${DIR}/${id}.json`,null,JSON.stringify(job,null,2)+'\n',`recipes: queue ${id} [site]`);
+        text.value='';localStorage.removeItem(draftKey);
+        await outbox.flush();
+        if(outbox.pending().some(item=>item.id===op.id)) status.textContent='Saved on this device. Sync retries automatically; you can enter another request.';
+        else {await load();status.textContent='Queued for the next desktop run.';}
       } catch(e) {status.textContent=e.message;} finally {submit.disabled=false;}
     };
+    watchProject(load,()=>box.open && localStorage.getItem("secundus.view")==="diet");
     refresh.onclick=load;box.ontoggle=()=>{if(box.open&&!loaded)load();};
   }
   return {mount,format};

@@ -32,8 +32,11 @@
     if(owners.has(host))return owners.get(host).promise;
     const record={promise:null};owners.set(host,record);
     const shadow=host.shadowRoot||host.attachShadow({mode:'open'});
-    let stylesReady=false;
-    async function load(){
+    let stylesReady=false, lastSha, loading=false;
+    const editing=()=>shadow.activeElement?.matches("input,textarea,select,[contenteditable]") || shadow.querySelector("dialog[open]");
+    async function load(background=false){
+      if(loading || background && editing())return true;
+      loading=true;
       const previous=shadow.querySelector('.academics-root');
       if(previous){const button=previous.querySelector('#refresh-coursework');if(button){button.disabled=true;button.textContent='Refreshing…';}}
       else {
@@ -45,6 +48,7 @@
         const result=await options.readFile(PATH);
         if(!result)throw new Error('No saved coursework export is available in this repository.');
         const fixture=normalize(result.data);
+        if(background && (editing() || result.sha===lastSha))return true;
         if(!stylesReady){
           const styles=await Promise.allSettled(['tokens.css','academics.css'].map(name=>new Promise((resolve,reject)=>{
             const link=host.ownerDocument.createElement('link');link.rel='stylesheet';link.href=new URL(name,assetBase).href;
@@ -57,17 +61,21 @@
           }
           stylesReady=true;
         }
+        const saved=previous?.syncView?.();
         shadow.querySelectorAll('.academics-root,.load-state').forEach(el=>el.remove());
         const root=host.ownerDocument.createElement('div');root.className='academics-root';shadow.append(root);
-        install(root,fixture,load);
+        install(root,fixture,()=>load(false),saved);lastSha=result.sha;
       }catch(error){
         if(previous){const warning=previous.querySelector('#snapshot-warning');warning.textContent='Could not refresh saved data. Showing the previous export. '+error.message;warning.className='academics-notice';}
         else {shadow.querySelectorAll('.load-state').forEach(el=>el.remove());const box=host.ownerDocument.createElement('div');box.className='load-state';box.setAttribute('role','alert');const text=host.ownerDocument.createElement('p');text.textContent='Coursework could not load. '+error.message;box.append(text);const retry=host.ownerDocument.createElement('button');retry.textContent='Try again';retry.onclick=()=>{retry.disabled=true;record.promise=load();};box.append(retry);shadow.append(box);}
-      }finally{host.removeAttribute('aria-busy');const button=shadow.querySelector('#refresh-coursework');if(button){button.disabled=false;button.textContent='Refresh saved data';}}
+        return false;
+      }finally{loading=false;host.removeAttribute('aria-busy');const button=shadow.querySelector('#refresh-coursework');if(button){button.disabled=false;button.textContent='Refresh saved data';}}
     }
-    record.promise=load();return record.promise;
+    record.promise=load();
+    if(options.watch)record.watch=options.watch(()=>load(true));
+    return record.promise;
   }
-  function install(root,fixture,reload){
+  function install(root,fixture,reload,saved){
     root.innerHTML="  <div class=\"app-shell\">\n    <aside class=\"app-sidebar\" aria-label=\"Academic navigation\">\n      <div class=\"sidebar-title\">Workspace</div>\n      <nav class=\"design-nav\" aria-label=\"Views\">\n        <a href=\"#academic-timeline\" data-view=\"timeline\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M7 3v4m10-4v4M3 10h18m-13 4h1m6 0h1m-8 4h1\"/></svg><span>Calendar</span></a>\n        <a href=\"#academic-ledger\" data-view=\"ledger\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 6h12M9 12h12M9 18h12M3 6h1m-1 6h1m-1 6h1\"/></svg><span>Assignments</span></a>\n        <a href=\"#academic-map\" data-view=\"map\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 6c-3-3-7-3-10-2v15c3-1 7-1 10 2 3-3 7-3 10-2V4c-3-1-7-1-10 2Zm0 0v15\"/></svg><span>Courses</span></a>\n        <a href=\"#academic-focus\" data-view=\"focus\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"4\"/><path d=\"m8 12 3 3 5-6\"/></svg><span>Focus</span></a>\n      </nav>\n      <div class=\"sidebar-title course-heading\">Courses <span>5</span></div>\n      <nav id=\"course-strip\" class=\"course-strip\" aria-label=\"Filter by course\"></nav>\n      <p class=\"sidebar-tip\">Select a course to filter.<br>Select it again to see all.</p>\n      <div class=\"sidebar-bottom\"><span class=\"saved-dot\" aria-hidden=\"true\"></span> Saved coursework <small><span id=\"sidebar-source-date\"></span></small></div>\n    </aside>\n    <main id=\"main\">\n      <div class=\"snapshot-bar\"><span id=\"snapshot-date\"></span><button type=\"button\" id=\"refresh-coursework\">Refresh saved data</button></div><div id=\"snapshot-warning\"></div><div class=\"controlbar\"><div class=\"workspace-label\">Academics</div><label class=\"search\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" aria-hidden=\"true\"><circle cx=\"10.5\" cy=\"10.5\" r=\"6.5\"/><path d=\"m16 16 4.5 4.5\"/></svg><span class=\"sr-only\">Find an assignment</span><input id=\"search\" type=\"search\" placeholder=\"Search homework\"></label><details class=\"filters\"><summary>Filter</summary><div class=\"filter-panel\"><label>Course<select id=\"course\"><option value=\"all\">All courses</option></select></label><label>Status<select id=\"status\"><option value=\"all\">All work</option><option value=\"todo\">To do</option><option value=\"record\">Course records</option><option value=\"submitted\">Submitted</option></select></label></div></details></div>\n      <div id=\"results-summary\" class=\"results\" aria-live=\"polite\"></div>\n      <div id=\"content\"></div>\n      <footer><span>Saved coursework · Pacific time</span><button id=\"about-footer\">Source &amp; scope</button></footer>\n    </main>\n  </div>\n  <dialog id=\"task-dialog\" aria-labelledby=\"task-dialog-title\"><div class=\"dialog-toolbar\"><button id=\"task-close\">Done</button><span class=\"eyebrow\">Assignment details</span></div><div id=\"dialog-content\"></div></dialog>\n  <dialog id=\"about-dialog\" aria-labelledby=\"about-title\"><div class=\"dialog-toolbar\"><span class=\"eyebrow\">Data &amp; sources</span><button id=\"about-close\">Done</button></div><div class=\"about-content\"><h2 id=\"about-title\">Your saved coursework.</h2><p id=\"about-snapshot\"></p><p>The calendar uses source due dates in Pacific time. Planning targets remain separate: deadlines before 2 PM are planned for 9 PM the previous evening.</p><p>Refresh saved data reloads the repository export. It does not refresh Canvas. Missing deadlines remain visible below the calendar. Source capture dates appear in each homework detail.</p><p>Drafts and assignment files stay in the course library. Source links open the original course service. This view cannot submit assignments or change coursework.</p></div></dialog>";
 'use strict';
 const courseCatalog=fixture.courses;
@@ -184,6 +192,8 @@ $('#search').addEventListener('input',render);$('#course').addEventListener('cha
 
 $('#task-close').onclick=()=>$('#task-dialog').close();
 for(const id of ['about-footer'])$('#'+id).onclick=()=>$('#about-dialog').showModal();$('#about-close').onclick=()=>$('#about-dialog').close();
+if(saved){view=saved.view;selected=saved.selected;workspaceCourse=saved.workspaceCourse;ledgerSort=saved.ledgerSort;ledgerField=saved.ledgerField;for(const id of ['search','course','status'])$('#'+id).value=saved[id];}
+root.syncView=()=>({view,selected,workspaceCourse,ledgerSort,ledgerField,search:$('#search').value,course:$('#course').value,status:$('#status').value});
 render();
 
     const formatDate=value=>value?new Date(value).toLocaleString('en-US',{timeZone:'America/Los_Angeles'}):'Not recorded';

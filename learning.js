@@ -77,13 +77,13 @@
     '<path d="M12 65h72M20 65V30h26v35m0-24h28v24M27 41h11m-11 10h11M55 52h11M19 20l23-9 31 15"/><circle cx="74" cy="25" r="5"/>',
     '<path d="M48 10 77 23v20c0 15-17 24-29 30-12-6-29-15-29-30V23Z M32 41l11 11 23-26"/>'
   ];
-  function mount(host) {
+  function mount(host, options = {}) {
     if (mounted.has(host)) return mounted.get(host);
     const root = host.shadowRoot || host.attachShadow({mode: 'open'});
     root.innerHTML = `<link rel="stylesheet" href="${esc(assetBase + 'learning.css')}"><div class="learning"></div>`;
     const content = root.querySelector('.learning');
     const state = {view: 'feed', topic: null, expanded: null, origin: 'topic-models-reasoning', foundations: null, news: null, notices: {}, loading: false};
-    let request = 0;
+    let request = 0, lastSnapshot;
     const button = (action, value, label, extra = '') => `<button type="button" data-action="${action}" data-value="${esc(value)}" ${extra}>${esc(label)}</button>`;
     const topicTitle = value => TOPICS.find(t => t[0] === value)?.[1] || 'All topics';
     const matching = records => records.filter(x => !state.topic || x.subtopics.includes(state.topic));
@@ -120,9 +120,10 @@
       if (target) target.focus({preventScroll: true});
       else if (active) root.querySelector(`[data-action="view"][data-value="${state.view}"]`)?.focus({preventScroll: true});
     }
-    async function reload() {
+    async function reload(background = false) {
+      if (background && (state.loading || root.activeElement?.matches("input,textarea,select") || root.querySelector("details[open]"))) return true;
       const serial = ++request;
-      state.loading = true; render();
+      state.loading = true; if (!background) render();
       const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 15000);
       try {
         const response = await fetch(assetBase + 'learning-snapshot.json', {signal: controller.signal, cache: 'no-store', credentials: 'omit'});
@@ -130,6 +131,8 @@
         const value = await response.json();
         if (!object(value) || value.schema_version !== 1) throw new Error('Unsupported snapshot');
         if (serial !== request) return;
+        if (background && (JSON.stringify(value) === lastSnapshot || root.querySelector('details[open]'))) { state.loading=false; return; }
+        lastSnapshot=JSON.stringify(value);
         for (const [key, validate] of [['foundations', foundationSection], ['news', newsSection]]) {
           const section = validate(value[key]);
           const label = key === 'news' ? 'News' : 'Foundations';
@@ -141,9 +144,10 @@
       } catch (_) {
         if (serial !== request) return;
         for (const key of ['foundations','news']) state.notices[key] = `${key === 'news' ? 'News' : 'Foundations'} unavailable: the saved snapshot could not be loaded.${state[key] ? ' Previously loaded content is retained and may be stale.' : ''} Retry to recover.`;
+        return false;
       } finally {
         clearTimeout(timeout);
-        if (serial === request) { state.loading = false; render(); }
+        if (serial === request && state.loading) { state.loading = false; render(); }
       }
     }
     root.addEventListener('click', event => {
@@ -171,6 +175,7 @@
     const api = {reload, ready: null};
     mounted.set(host, api);
     api.ready = reload();
+    if (options.watch) api.watch = options.watch(() => reload(true));
     return api;
   }
   const Learning = {mount};
