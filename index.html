@@ -2025,6 +2025,9 @@ const Weight = (() => {
     const thDateWrap = el(thl, "span", "wt-tdwrap");
     const thDate = el(thDateWrap, "span", "wt-td");
     const dayIn = el(thDateWrap, "input", "wt-tdin"); dayIn.type = "date"; dayIn.setAttribute("aria-label", "Pick a day to log or edit");
+    /* desktop Chromium only focuses a date input on click — the calendar opens
+       from its icon, which opacity:0 hides. Open it ourselves. */
+    dayIn.onclick = () => { try { dayIn.showPicker(); } catch (_) {} };
     const tick = el(th, "span", "wt-tick", "✓");
     const body = el(today, "div", "wt-tb");
     const msg = el(today, "div", "wt-msg");
@@ -2102,7 +2105,7 @@ const Weight = (() => {
       /* today / picked day */
       const isToday = cursor === TODAY;
       thTitle.textContent = isToday ? "Today" : fmtDay(cursor);
-      thDate.textContent = (isToday ? fmtDay(cursor) : "picked day") + " · " + (onDay ? onDay.lbs.toFixed(1) + " lb" : "No data");
+      thDate.textContent = (isToday ? fmtDay(cursor) : "picked day") + " · " + (onDay ? onDay.lbs.toFixed(1) + " lb" : "No data") + " ▾";   /* ▾ = this opens a day picker */
       dayIn.value = cursor; dayIn.max = TODAY;   /* no weighing in the future */
       dayIn.onchange = () => { if (dayIn.value) { cursor = dayIn.value; editing = false; err = ""; confirmVal = null; paint(); } };
       tick.style.display = onDay ? "" : "none";
@@ -3144,6 +3147,10 @@ const Food = (() => {
 let PROTEIN_RANGE = TARGETS.protein_day_range || [130,150];
 let breakfastId = localStorage.getItem("secundus-food-breakfast") || "";
 function breakfastSelector(host) {
+  if (TARGETS.main_meals_per_day === 2) {
+    host.createDiv({ cls: "psub", text: "Daily check: one portion at lunch + a second portion at dinner." });
+    return;
+  }
   const row = host.createDiv({ cls: "psub" });
   row.createSpan({ text: "Optional day planning: " });
   const select = row.createEl("select"); select.setAttribute("aria-label", "Breakfast for daily check");
@@ -3155,6 +3162,12 @@ function breakfastSelector(host) {
   select.onchange = () => { breakfastId = select.value; localStorage.setItem("secundus-food-breakfast", breakfastId); renderPlan(); };
 }
 function dailyRemaining(main) {
+  if (TARGETS.main_meals_per_day === 2) {
+    const calories = 2 * main.cal, protein = 2 * main.p;
+    return { two_meals: true, day_calories: calories, day_protein: protein,
+      calories: TARGETS.cal_day - calories, protein: Math.max(0, PROTEIN_RANGE[0] - protein),
+      overProtein: protein > PROTEIN_RANGE[1], incomplete: main.incomplete, conditional: main.conditional };
+  }
   if (!breakfastId) return null;
   const breakfast = byId.get(breakfastId), entry = plan.get(breakfastId);
   const b = breakfast ? plateMacros(breakfast, entry?.qtys, entry?.ver) : { cal: 0, p: 0, incomplete: true };
@@ -3426,7 +3439,7 @@ const planWarnings = [];
     const hrEl = hdr.createDiv({ cls: "hr" });
     function renderTargets() {
     hrEl.empty();
-    hrEl.createDiv({ cls: "targetline", text: `${PROTEIN_RANGE.join("–")}g protein / day · breakfast + one main meal + snacks` });
+    hrEl.createDiv({ cls: "targetline", text: `${PROTEIN_RANGE.join("–")}g protein / day · ${TARGETS.meal_structure || "breakfast + one main meal + snacks"}` });
     breakfastSelector(hrEl);
     }
     renderTargets();
@@ -4027,10 +4040,12 @@ const planWarnings = [];
         const remaining = dailyRemaining(t);
     const fitEl = line.createDiv({ cls: "mealfit" });
     fitEl.createSpan({ text: t.incomplete ? "Main-meal nutrition unverified" : `${Math.round(t.cal)} cal · ${Math.round(t.p)}g protein in this main meal` });
-    fitEl.createSpan({ cls: remaining && (remaining.calories < 0 || remaining.incomplete) ? "fit-over" : "", text: !remaining ? " · recipe only; no daily allocation selected" : remaining.incomplete
+    fitEl.createSpan({ cls: remaining && (remaining.calories < 0 || remaining.incomplete || remaining.overProtein) ? "fit-over" : "", text: !remaining ? " · recipe only; no daily allocation selected" : remaining.incomplete
       ? " · daily check incomplete: unresolved nutrition"
+      : remaining.two_meals
+      ? ` · two portions/day (estimated): ${Math.round(remaining.day_calories)} cal · ${Math.round(remaining.day_protein)}g protein; ${Math.round(remaining.calories)} cal budget remaining${remaining.protein > 0 ? ` · short ${Math.ceil(remaining.protein)}g protein` : remaining.overProtein ? " · above protein range" : " · protein within daily range"}`
       : ` · after breakfast, snacks need at least ${Math.ceil(remaining.protein)}g protein; ${Math.round(remaining.calories)} cal remaining` });
-    if (remaining) fitEl.createSpan({ text: `${remaining.conditional ? " · depends on estimated cooking retention" : ""} · snacks must be chosen before calling the day complete` });
+    if (remaining) fitEl.createSpan({ text: `${remaining.conditional ? " · depends on estimated cooking retention" : ""}${remaining.two_meals ? " · includes the same meal at lunch and dinner" : " · snacks must be chosen before calling the day complete"}` });
       });
 
       const mainSrv = mains.reduce((a, r) => a + plan.get(r.id).servings, 0);
