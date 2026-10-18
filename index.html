@@ -2527,10 +2527,11 @@ const Workout = (() => {
         dialog.panel.close(); pickBlock(block);
       }, "uw-link");
       if (block.rest) el(section, "p", "uw-small", model.source.rest_range ? `${model.source.rest_range.join("–")}s between sets` : `${block.rest}s between rounds`);
-      block.items.forEach(item => {
+      block.items.forEach((item, index) => {
+        const selected = block.steps.find(step => step.index === index)?.item || item;
         const row = el(section, "div", "uw-overrow");
-        el(row, "span", null, item.n);
-        el(row, "span", "uw-small", target(item, resolveMovement(item.n) || {}));
+        el(row, "span", null, [cleanName(item.n), ...(item.alternatives || [])].join(" or "));
+        el(row, "span", "uw-small", target(selected, resolveMovement(selected.n) || {}));
       });
       prose(section, block.prose);
     });
@@ -2636,6 +2637,28 @@ const Workout = (() => {
   function paintMovement(parent, step) {
     const day = week.days[active], block = step.block, rx = step.item ? prescription(step.item, step.meta) : null;
     el(parent, "h2", "uw-title", step.canon || block.title);
+    let updateChoiceLock = () => {};
+    if (step.options?.length > 1) {
+      const field = el(parent, "label", "uw-field"); el(field, "span", null, "Choose one for this slot");
+      const select = el(field, "select"); select.setAttribute("aria-label", "Exercise for this slot");
+      step.options.forEach(name => { const option = el(select, "option", null, name); option.value = name; });
+      select.value = step.canon;
+      const lockMessage = el(field, "span", "uw-small");
+      updateChoiceLock = () => {
+        select.disabled = model.steps.some(other => other.slot === step.slot && stepMark(other) === "done") ||
+          step.options.some(name => data.records.get(entryKey(DATE, day.key, name))?.done);
+        lockMessage.textContent = select.disabled ? "This slot has a logged movement today." : "";
+        return select.disabled;
+      };
+      updateChoiceLock();
+      select.onchange = () => {
+        if (updateChoiceLock()) { select.value = step.canon; return; }
+        const previous = state.choices[step.slot];
+        state.choices[step.slot] = select.value;
+        if (!saveUI()) { if (previous === undefined) delete state.choices[step.slot]; else state.choices[step.slot] = previous; select.value = step.canon; return; }
+        render();
+      };
+    }
     const instructions = step.item && (String(step.item.n).match(/\((.*?)\)/) || [])[1];
     if (step.item) el(parent, "p", "uw-small", [step.meta.equipment, block.location, instructions].filter(Boolean).join(" · "));
     const layout = el(parent, "div", "uw-detail");
@@ -2668,6 +2691,7 @@ const Workout = (() => {
     }
     refreshLoadedHistory = () => {
       paintPrescription();
+      updateChoiceLock();
       if (newDraft && !edited && !activeClock) {
         Object.assign(current, initialDraft(step));
         for (const [key, input] of Object.entries(inputs)) input.value = current[key];
@@ -2737,7 +2761,7 @@ const Workout = (() => {
           done: true, ...(current || {}), ...(step.mode === "hold" && duration ? { time: `${duration}s` } : {})
         });
       } catch (_) { error.textContent = "Could not save on this device. Keep this page open and try again."; return; }
-      state.marks[step.id] = "done"; saveUI(); paintOutline(); stateLabel.textContent = "This step is logged.";
+      state.marks[step.id] = "done"; saveUI(); paintOutline(); updateChoiceLock(); stateLabel.textContent = "This step is logged.";
       announce(step.mode === "none" ? "Step completed" : "Logged · sync queued");
       if (step.rest) startTimer("rest", step.rest, () => go(state.pos + 1)); else go(state.pos + 1);
     }
@@ -2775,7 +2799,8 @@ const Workout = (() => {
     if (block.kind === "ss" && block.items.length > 1) {
       const pair = el(main, "div", "uw-pair"); pair.setAttribute("aria-label", "Paired movements");
       block.items.forEach((item, i) => {
-        const b = button(pair, `${String.fromCharCode(65 + i)} · ${cleanName(item.n)}`, () => go(model.steps.findIndex(s => s.block === block && s.round === step.round && s.index === i)));
+        const selected = block.steps.find(other => other.round === step.round && other.index === i);
+        const b = button(pair, `${String.fromCharCode(65 + i)} · ${selected?.canon || cleanName(item.n)}`, () => go(model.steps.findIndex(s => s.block === block && s.round === step.round && s.index === i)));
         b.setAttribute("aria-pressed", String(step.index === i));
       });
     }
@@ -2815,7 +2840,11 @@ const Workout = (() => {
       el(card, "p", "uw-small", "No strength sets are scheduled for this recovery day. Share how you feel in the workout chat.");
       return;
     }
-    model = WorkoutSession.build(day, gear, week.room_session, resolveMovement);
+    if (!dated) {
+      state = ui[stateKey()] ||= { pos: 0, marks: {}, drafts: {}, holds: {}, choices: {} };
+      state.choices ||= {};
+    }
+    model = WorkoutSession.build(day, gear, week.room_session, resolveMovement, dated ? {} : state.choices);
     if (dated?.preview) {
       tabEls.forEach((tab, index) => tab.setAttribute("aria-pressed", String(index === active)));
       titleEl.textContent = dated.title;
@@ -2833,7 +2862,7 @@ const Workout = (() => {
       el(card, "p", "uw-small", `Applies ${formatDate(dated.date)} only. Logging opens on that date; the recurring week stays unchanged.`);
       return;
     }
-    state = ui[stateKey()] ||= { pos: 0, marks: {}, drafts: {}, holds: {} };
+    state = ui[stateKey()] ||= { pos: 0, marks: {}, drafts: {}, holds: {}, choices: {} };
     state.pos = Math.max(0, Math.min(model.steps.length - 1, Number(state.pos) || 0));
     state.marks ||= {}; state.drafts ||= {}; state.holds ||= {};
     tabEls.forEach((tab, index) => { tab.setAttribute("aria-pressed", String(index === active)); });

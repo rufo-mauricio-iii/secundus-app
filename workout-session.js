@@ -45,7 +45,7 @@ const WorkoutSession = (() => {
     const match = /(\d+)\s*(s(?:ec)?|m(?:in)?)\b/.exec(text);
     return match ? Number(match[1]) * (match[2][0] === "m" ? 60 : 1) : 0;
   }
-  function build(day, gear, roomSession, resolve = () => ({})) {
+  function build(day, gear, roomSession, resolve = () => ({}), choices = {}) {
     const room = !day.fixed_rounds && gear === "room" && roomSession;
     const source = room || day, rounds = source.fixed_rounds ?? (gear === "blue" ? 2 : gear === "red" ? 3 : 1);
     const blocks = [], steps = [];
@@ -56,11 +56,14 @@ const WorkoutSession = (() => {
         const step = { id, block, mode: "none", round: 1 };
         block.steps.push(step); steps.push(step);
       } else {
-        for (let round = 1; round <= block.rounds; round++) items.forEach((item, index) => {
+        for (let round = 1; round <= block.rounds; round++) items.forEach((original, index) => {
+          const slot = `${id}:${index}`;
+          const option = (original.alternatives || []).find(name => name === choices[slot]);
+          const item = option ? { n: option, r: resolve(option)?.reps || "", log: original.log } : original;
           const mode = item.log || (block.kind === "ss" ? "full" : block.kind === "finisher" ? "check" : "none");
           const rest = block.kind === "warmup" ? (index < items.length - 1 ? 30 : 0)
             : index === items.length - 1 && round < block.rounds ? block.rest : 0;
-          const step = { id: `${id}:${index}:${round}`, block, item, canon: cleanName(item.n), meta: resolve(item.n) || {}, mode, round, index, rest };
+          const step = { id: `${id}:${index}:${round}`, slot, options: [cleanName(original.n), ...(original.alternatives || [])], block, item, canon: cleanName(item.n), meta: resolve(item.n) || {}, mode, round, index, rest };
           block.steps.push(step); steps.push(step);
         });
       }
