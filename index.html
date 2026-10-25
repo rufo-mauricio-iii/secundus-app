@@ -85,6 +85,18 @@ async function gh(path, opts = {}) {
      commit got to. gh() is the only door to the repo, so it is the only place
      that needs to know. */
   const writing = /^(PUT|POST|PATCH|DELETE)$/i.test(opts.method || "GET");
+  if (writing) {
+    let payload; try { payload = JSON.parse(opts.body || "{}"); } catch (_) { throw Error("Invalid pending write; original retained."); }
+    const direct = path.split("?")[0].replace(/^contents\//, "");
+    const health = direct.startsWith("orgs/health/") || (Array.isArray(payload.tree) && payload.tree.some(entry => String(entry.path).startsWith("orgs/health/")));
+    if (health) {
+      const authority = await gh(`contents/shared/health-cloud-authority.json?t=${Date.now()}`);
+      if (authority.status !== 404) {
+        if (!authority.ok) throw Error("Cannot check Health ownership. Pending edit retained.");
+        throw Error("Health now uses Secundus Cloud. This page is read-only; pending edits remain available for review.");
+      }
+    }
+  }
   if (writing) syncBegin();
   try {
     const res = await fetchGitHub(url, {
